@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstdint>
+#include <limits>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -65,6 +67,23 @@ namespace ironphoenix {
             return static_cast<std::uint8_t>(setup) + 1u;
         }
 
+        constexpr std::string_view MODERN_START_FEN =
+            "R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-"
+            "x,x,x,yR,yN,yB,yK,yQ,yB,yN,yR,x,x,x/"
+            "x,x,x,yP,yP,yP,yP,yP,yP,yP,yP,x,x,x/"
+            "x,x,x,8,x,x,x/"
+            "bR,bP,10,gP,gR/"
+            "bN,bP,10,gP,gN/"
+            "bB,bP,10,gP,gB/"
+            "bQ,bP,10,gP,gK/"
+            "bK,bP,10,gP,gQ/"
+            "bB,bP,10,gP,gB/"
+            "bN,bP,10,gP,gN/"
+            "bR,bP,10,gP,gR/"
+            "x,x,x,8,x,x,x/"
+            "x,x,x,rP,rP,rP,rP,rP,rP,rP,rP,x,x,x/"
+            "x,x,x,rR,rN,rB,rQ,rK,rB,rN,rR,x,x,x";
+
         bool parseDepth(std::string_view s, int& depth) {
             s = trim(s);
             if (s.empty()) return false;
@@ -72,6 +91,22 @@ namespace ironphoenix {
                 std::size_t used = 0;
                 depth = std::stoi(std::string(s), &used);
                 return used == s.size() && depth >= 0 && depth <= 64;
+            }
+            catch (...) {
+                return false;
+            }
+        }
+
+        bool parseNonNegative64(std::string_view s, std::int64_t& value) {
+            s = trim(s);
+            if (s.empty()) return false;
+            try {
+                std::size_t used = 0;
+                const long long parsed = std::stoll(std::string(s), &used);
+                if (used != s.size() || parsed < 0)
+                    return false;
+                value = static_cast<std::int64_t>(parsed);
+                return true;
             }
             catch (...) {
                 return false;
@@ -180,16 +215,27 @@ namespace ironphoenix {
 
     }
 
+    UciShell::UciShell()
+        : startFen_(MODERN_START_FEN), setup_(SetupType::Modern) {
+        pos_.setRulesetId(setupRulesetId(setup_));
+
+        std::string error;
+        if (setFromFen4(pos_, startFen_, fenState_, error))
+            configureStandard4PCCastling(pos_);
+        else
+            pos_.clear();
+    }
+
     void UciShell::printHelp(std::ostream& out) const {
         out <<
             "IronPhoenix commands:\n"
             "  uci                         - UCI identification/options\n"
             "  isready                     - prints readyok\n"
-            "  ucinewgame                  - reload configured StartFEN if present\n"
+            "  ucinewgame                  - reload current setup start position\n"
             "  setoption name Setup value <Modern|Classic|BY|BYG|RG|Custom>\n"
             "  setoption name StartFEN value <FEN4>\n"
             "  position fen <FEN4> [moves <m1> <m2> ...]\n"
-            "  position startpos [moves ...]   (requires StartFEN)\n"
+            "  position startpos [moves ...]   (Modern is built in by default)\n"
             "  d                           - display board\n"
             "  fen                         - print normalized FEN4\n"
             "  moves                       - list legal moves\n"
@@ -197,6 +243,13 @@ namespace ironphoenix {
             "  perftdetail <depth>         - nodes/captures/EP/castles/promos/checks\n"
             "  divide <depth>              - per-root-move perft breakdown\n"
             "  go perft <depth>            - UCI-style perft command\n"
+            "  go depth <n>                - PVS/negamax to fixed depth\n"
+            "  go movetime <ms>            - search for a fixed time\n"
+            "  go nodes <n>                - search until node limit\n"
+            "  go infinite                 - search until stop (infinate also accepted)\n"
+            "  go time <r> <b> <y> <g> increments <r> <b> <y> <g>\n"
+            "          delays <r> <b> <y> <g>   - four-player clocks in milliseconds\n"
+            "  stop                        - stop the active search\n"
             "  perfttest                   - built-in movegen/FEN smoke suite\n"
             "  key                         - print Zobrist key\n"
             "  quit                        - exit\n";
@@ -222,6 +275,7 @@ namespace ironphoenix {
     }
 
     bool UciShell::handleSetOption(std::string_view args, std::ostream& out) {
+        search_.stopAndWait();
         args = trim(args);
 
         constexpr std::string_view setupPrefix = "name Setup value ";
@@ -236,6 +290,11 @@ namespace ironphoenix {
             setup_ = requested;
             pos_.setRulesetId(setupRulesetId(setup_));
             clearCastlingGeometry(pos_);
+
+            if (setup_ == SetupType::Modern)
+                startFen_ = MODERN_START_FEN;
+            else
+                startFen_.clear();
 
             out << "info string Setup set to " << setupName(setup_) << '\n';
             return true;
@@ -258,11 +317,33 @@ namespace ironphoenix {
             return true;
         }
 
+        constexpr std::string_view hashPrefix = "name Hash value ";
+        if (startsWith(args, hashPrefix)) {
+            std::int64_t mb = 0;
+            if (!parseNonNegative64(trim(args.substr(hashPrefix.size())), mb) || mb < 1 || mb > 4096) {
+                out << "info string Hash must be between 1 and 4096 MB\n";
+                return false;
+            }
+            if (!search_.setHashSizeMB(static_cast<std::size_t>(mb))) {
+                out << "info string unable to allocate Hash\n";
+                return false;
+            }
+            out << "info string Hash set to " << search_.hashSizeMB() << " MB\n";
+            return true;
+        }
+
+        if (args == "name Clear Hash") {
+            search_.clearHash();
+            out << "info string Hash cleared\n";
+            return true;
+        }
+
         out << "info string unsupported option\n";
         return false;
     }
 
     bool UciShell::handlePosition(std::string_view args, std::ostream& out) {
+        search_.stopAndWait();
         args = trim(args);
 
         std::string_view positionSpec = args;
@@ -350,6 +431,87 @@ namespace ironphoenix {
         return true;
     }
 
+    bool UciShell::handleGo(std::string_view args, std::ostream& out) {
+        args = trim(args);
+
+        if (missingCastlingGeometry(pos_)) {
+            out << "info string search refused: castling rights exist but CastleLane geometry is not configured\n";
+            return false;
+        }
+
+        SearchLimits limits;
+        std::istringstream input{ std::string(args) };
+        std::string token;
+
+        auto readI64 = [&](std::int64_t& value) -> bool {
+            std::string text;
+            if (!(input >> text))
+                return false;
+            return parseNonNegative64(text, value);
+            };
+
+        auto readClockArray = [&](std::array<std::int64_t, COLOR_NB>& values) -> bool {
+            for (unsigned i = 0; i < COLOR_NB; ++i)
+                if (!readI64(values[i]))
+                    return false;
+            return true;
+            };
+
+        while (input >> token) {
+            if (token == "depth") {
+                std::int64_t value = 0;
+                if (!readI64(value) || value < 1 || value > 127) {
+                    out << "info string go depth must be between 1 and 127\n";
+                    return false;
+                }
+                limits.depth = static_cast<int>(value);
+            }
+            else if (token == "movetime") {
+                if (!readI64(limits.movetimeMs)) {
+                    out << "info string invalid go movetime\n";
+                    return false;
+                }
+            }
+            else if (token == "nodes") {
+                std::int64_t value = 0;
+                if (!readI64(value)) {
+                    out << "info string invalid go nodes\n";
+                    return false;
+                }
+                limits.nodes = static_cast<std::uint64_t>(value);
+            }
+            else if (token == "infinite" || token == "infinate") {
+                limits.infinite = true;
+            }
+            else if (token == "time") {
+                if (!readClockArray(limits.timeMs)) {
+                    out << "info string go time requires: rtime btime ytime gtime\n";
+                    return false;
+                }
+                limits.hasClock = true;
+            }
+            else if (token == "increments") {
+                if (!readClockArray(limits.incrementMs)) {
+                    out << "info string increments requires: rinc binc yinc ginc\n";
+                    return false;
+                }
+            }
+            else if (token == "delays") {
+                if (!readClockArray(limits.delayMs)) {
+                    out << "info string delays requires: rdelay bdelay ydelay gdelay\n";
+                    return false;
+                }
+            }
+            else {
+                out << "info string unknown go token: " << token << '\n';
+                return false;
+            }
+        }
+
+        search_.start(pos_, limits, out);
+        return true;
+    }
+
     bool UciShell::handleLine(const std::string& rawLine, std::ostream& out) {
         const std::string_view line = trim(rawLine);
         if (line.empty())
@@ -360,6 +522,8 @@ namespace ironphoenix {
                 << "id author Nick\n"
                 << "option name Setup type combo default Modern var Modern var Classic var BY var BYG var RG var Custom\n"
                 << "option name StartFEN type string default <none>\n"
+                << "option name Hash type spin default 64 min 1 max 4096\n"
+                << "option name Clear Hash type button\n"
                 << "uciok\n";
         }
         else if (line == "isready") {
@@ -369,11 +533,14 @@ namespace ironphoenix {
             printHelp(out);
         }
         else if (line == "ucinewgame") {
+            search_.newGame();
             pos_.setRulesetId(setupRulesetId(setup_));
             if (!startFen_.empty()) {
                 std::string error;
                 if (!setFromFen4(pos_, startFen_, fenState_, error))
                     out << "info string StartFEN reload failed: " << error << '\n';
+                else
+                    configureStandard4PCCastling(pos_);
             }
         }
         else if (startsWith(line, "setoption ")) {
@@ -381,6 +548,12 @@ namespace ironphoenix {
         }
         else if (startsWith(line, "position ")) {
             handlePosition(line.substr(9), out);
+        }
+        else if (startsWith(line, "go ") && !startsWith(line, "go perft ")) {
+            handleGo(line.substr(3), out);
+        }
+        else if (line == "go") {
+            handleGo({}, out);
         }
         else if (line == "d") {
             printBoard(out);
@@ -478,9 +651,10 @@ namespace ironphoenix {
             }
         }
         else if (line == "stop") {
-
+            search_.stop();
         }
         else if (line == "quit") {
+            search_.stopAndWait();
             return false;
         }
         else {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "fen.hpp"
+#include "search.hpp"
 
 #include <cstdint>
 #include <iosfwd>
@@ -20,6 +21,7 @@ namespace ironphoenix {
 
     class UciShell {
     public:
+        UciShell();
         int run(std::istream& in, std::ostream& out);
 
     private:
@@ -27,10 +29,12 @@ namespace ironphoenix {
         Fen4State fenState_{};
         std::string startFen_;
         SetupType setup_ = SetupType::Modern;
+        SearchEngine search_{};
 
         bool handleLine(const std::string& line, std::ostream& out);
         bool handlePosition(std::string_view args, std::ostream& out);
         bool handleSetOption(std::string_view args, std::ostream& out);
+        bool handleGo(std::string_view args, std::ostream& out);
         void printBoard(std::ostream& out) const;
         void printHelp(std::ostream& out) const;
     };

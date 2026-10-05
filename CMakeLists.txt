@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.24)
 
 project(IronPhoenix VERSION 0.1.0 LANGUAGES CXX)
 
+find_package(Threads REQUIRED)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -16,6 +18,8 @@ add_library(ironphoenix_core STATIC
     src/zobrist.cpp
     src/position.cpp
     src/see.cpp
+    src/tt.cpp
+    src/search.cpp
     src/fen.cpp
     src/movegen.cpp
     src/preft.cpp
@@ -30,6 +34,7 @@ target_include_directories(ironphoenix_core
 )
 
 target_compile_features(ironphoenix_core PUBLIC cxx_std_20)
+target_link_libraries(ironphoenix_core PUBLIC Threads::Threads)
 
 if(MSVC)
     target_compile_options(ironphoenix_core PRIVATE
