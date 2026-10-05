@@ -34,7 +34,7 @@ int main() {
         Position p;
         p.clear();
         putKings(p);
-        p.placePiece(sq('g', 5), makePiece(BLUE, ROOK));
+        p.placePiece(sq('d', 1), makePiece(BLUE, ROOK));
         p.setSideToMove(RED);
         p.finalizeSetup();
         assert(p.inCheck());
@@ -99,6 +99,6 @@ int main() {
     assert(Geometry::isPromotionSquare(YELLOW, sq('g', 4)));
     assert(Geometry::isPromotionSquare(GREEN, sq('d', 7)));
 
-    std::cout << "iron_phoenix smoke tests: PASS\n";
+    std::cout << "nexus_fast_board smoke tests: PASS\n";
     return 0;
 }

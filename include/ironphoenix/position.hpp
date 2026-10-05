@@ -66,6 +66,10 @@ public:
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE std::uint8_t castlingRights() const noexcept { return castlingRights_; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE Square enPassant(Color c) const noexcept { return enPassant_[c]; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE std::uint8_t aliveMask() const noexcept { return aliveMask_; }
+    [[nodiscard]] IRONPHOENIX_FORCE_INLINE std::uint8_t rulesetId() const noexcept { return rulesetId_; }
+    [[nodiscard]] IRONPHOENIX_FORCE_INLINE const CastleLane& castleDefinition(Color c, unsigned lane) const noexcept {
+        return castle_[static_cast<unsigned>(c)][lane];
+    }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE bool isAlive(Color c) const noexcept {
         return (aliveMask_ & (1u << static_cast<unsigned>(c))) != 0;
     }

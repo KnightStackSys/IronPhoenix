@@ -7,11 +7,15 @@
 namespace ironphoenix {
 
 enum MoveFlag : std::uint32_t {
-    MF_NONE        = 0,
-    MF_EN_PASSANT  = 1u << 24,
-    MF_CASTLE      = 1u << 25,
-    MF_DOUBLE_PUSH = 1u << 26
+    MF_NONE           = 0,
+    MF_EN_PASSANT     = 1u << 24,
+    MF_CASTLE         = 1u << 25,
+    MF_DOUBLE_PUSH    = 1u << 26,
+    MF_EP_OWNER_VALID = 1u << 29
 };
+
+constexpr std::uint32_t MF_EP_OWNER_SHIFT = 27u;
+constexpr std::uint32_t MF_EP_OWNER_MASK  = 3u << MF_EP_OWNER_SHIFT;
 
 enum Promotion : std::uint8_t {
     PROMO_NONE   = 0,
@@ -54,10 +58,20 @@ struct Move {
     IRONPHOENIX_FORCE_INLINE constexpr bool isEnPassant() const noexcept { return (v & MF_EN_PASSANT) != 0; }
     IRONPHOENIX_FORCE_INLINE constexpr bool isCastle() const noexcept { return (v & MF_CASTLE) != 0; }
     IRONPHOENIX_FORCE_INLINE constexpr bool isDoublePush() const noexcept { return (v & MF_DOUBLE_PUSH) != 0; }
+    IRONPHOENIX_FORCE_INLINE constexpr bool hasEpOwner() const noexcept { return (v & MF_EP_OWNER_VALID) != 0; }
+    IRONPHOENIX_FORCE_INLINE constexpr Color epOwner() const noexcept {
+        return static_cast<Color>((v & MF_EP_OWNER_MASK) >> MF_EP_OWNER_SHIFT);
+    }
 
     IRONPHOENIX_FORCE_INLINE constexpr bool operator==(Move o) const noexcept { return v == o.v; }
     IRONPHOENIX_FORCE_INLINE constexpr bool operator!=(Move o) const noexcept { return v != o.v; }
 };
+
+IRONPHOENIX_FORCE_INLINE constexpr Move makeEnPassantMove(Square from, Square to, Piece captured, Color owner) noexcept {
+    const std::uint32_t flags = MF_EN_PASSANT | MF_EP_OWNER_VALID
+        | (static_cast<std::uint32_t>(owner) << MF_EP_OWNER_SHIFT);
+    return Move(from, to, captured, PROMO_NONE, flags);
+}
 
 IRONPHOENIX_FORCE_INLINE constexpr PieceType promotedType(Promotion p) noexcept {
     switch (p) {
