@@ -18,12 +18,16 @@ add_library(ironphoenix_core STATIC
     src/zobrist.cpp
     src/position.cpp
     src/see.cpp
+    src/history.cpp
+    src/lmr.cpp
     src/tt.cpp
     src/search.cpp
     src/fen.cpp
     src/movegen.cpp
     src/preft.cpp
     src/uci.cpp
+
+    include/ironphoenix/lmr.hpp
 )
 
 add_library(IronPhoenix::Core ALIAS ironphoenix_core)
@@ -60,7 +64,11 @@ else()
 endif()
 
 include(CheckIPOSupported)
-check_ipo_supported(RESULT IRONPHOENIX_IPO_SUPPORTED OUTPUT IRONPHOENIX_IPO_ERROR)
+check_ipo_supported(
+    RESULT IRONPHOENIX_IPO_SUPPORTED
+    OUTPUT IRONPHOENIX_IPO_ERROR
+)
+
 if(IRONPHOENIX_IPO_SUPPORTED)
     set_property(TARGET ironphoenix_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     set_property(TARGET ironphoenix_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
@@ -72,6 +80,7 @@ add_executable(ironphoenix
 
 target_link_libraries(ironphoenix PRIVATE IronPhoenix::Core)
 target_compile_features(ironphoenix PRIVATE cxx_std_20)
+
 set_target_properties(ironphoenix PROPERTIES
     OUTPUT_NAME "ironphoenix"
     VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:ironphoenix>"
