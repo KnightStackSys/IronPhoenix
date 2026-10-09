@@ -234,6 +234,7 @@ namespace ironphoenix {
             "  ucinewgame                  - reload current setup start position\n"
             "  setoption name Setup value <Modern|Classic|BY|BYG|RG|Custom>\n"
             "  setoption name StartFEN value <FEN4>\n"
+            "  setoption name MultiPV value <1..32>\n"
             "  position fen <FEN4> [moves <m1> <m2> ...]\n"
             "  position startpos [moves ...]   (Modern is built in by default)\n"
             "  d                           - display board\n"
@@ -329,6 +330,20 @@ namespace ironphoenix {
                 return false;
             }
             out << "info string Hash set to " << search_.hashSizeMB() << " MB\n";
+            return true;
+        }
+
+        constexpr std::string_view multiPvPrefix = "name MultiPV value ";
+        if (startsWith(args, multiPvPrefix)) {
+            std::int64_t value = 0;
+            if (!parseNonNegative64(trim(args.substr(multiPvPrefix.size())), value)
+                || value < 1 || value > SearchEngine::MAX_MULTI_PV) {
+                out << "info string MultiPV must be between 1 and "
+                    << SearchEngine::MAX_MULTI_PV << '\n';
+                return false;
+            }
+            multiPV_ = static_cast<int>(value);
+            out << "info string MultiPV set to " << multiPV_ << '\n';
             return true;
         }
 
@@ -508,7 +523,10 @@ namespace ironphoenix {
             }
         }
 
-        search_.start(pos_, limits, out);
+        if (multiPV_ > 1)
+            search_.startMultiPV(pos_, limits, multiPV_, out);
+        else
+            search_.start(pos_, limits, out);
         return true;
     }
 
@@ -523,6 +541,7 @@ namespace ironphoenix {
                 << "option name Setup type combo default Modern var Modern var Classic var BY var BYG var RG var Custom\n"
                 << "option name StartFEN type string default <none>\n"
                 << "option name Hash type spin default 64 min 1 max 4096\n"
+                << "option name MultiPV type spin default 1 min 1 max " << SearchEngine::MAX_MULTI_PV << "\n"
                 << "option name Clear Hash type button\n"
                 << "uciok\n";
         }
