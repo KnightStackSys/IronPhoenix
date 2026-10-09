@@ -246,12 +246,12 @@ namespace ironphoenix::Tuning {
             << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
             << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
             << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
-            << "option name EvalKingPressurePawn type spin default 2 min -100 max 100\n"
-            << "option name EvalKingPressureKnight type spin default 4 min -100 max 100\n"
-            << "option name EvalKingPressureBishop type spin default 4 min -100 max 100\n"
-            << "option name EvalKingPressureRook type spin default 5 min -100 max 100\n"
-            << "option name EvalKingPressureQueen type spin default 6 min -100 max 100\n"
-            << "option name EvalKingPressureCheckBonus type spin default 16 min -500 max 500\n"
+            << "option name EvalKingPressurePawn type spin default 0 min -100 max 100\n"
+            << "option name EvalKingPressureKnight type spin default 3 min -100 max 100\n"
+            << "option name EvalKingPressureBishop type spin default 3 min -100 max 100\n"
+            << "option name EvalKingPressureRook type spin default 4 min -100 max 100\n"
+            << "option name EvalKingPressureQueen type spin default 5 min -100 max 100\n"
+            << "option name EvalKingPressureCheckBonus type spin default 12 min -500 max 500\n"
             << "option name ResetTuning type button\n";
     }
 
