@@ -34,6 +34,14 @@ namespace ironphoenix {
             int bishopMobility = 4;
             int rookMobility = 2;
             int queenMobility = 1;
+
+            // Space rewards unique control of empty forward squares. Infiltration
+            // rewards non-pawn pieces that penetrate deeply toward the enemy side.
+            int spaceControl = 1;
+            int infiltrationKnight = 3;
+            int infiltrationBishop = 3;
+            int infiltrationRook = 2;
+            int infiltrationQueen = 1;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

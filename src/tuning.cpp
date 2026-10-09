@@ -58,7 +58,12 @@ namespace ironphoenix::Tuning {
                 || name == "EvalKnightMobility"
                 || name == "EvalBishopMobility"
                 || name == "EvalRookMobility"
-                || name == "EvalQueenMobility";
+                || name == "EvalQueenMobility"
+                || name == "EvalSpaceControl"
+                || name == "EvalInfiltrationKnight"
+                || name == "EvalInfiltrationBishop"
+                || name == "EvalInfiltrationRook"
+                || name == "EvalInfiltrationQueen";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -155,6 +160,16 @@ namespace ironphoenix::Tuning {
             p.rookMobility = value;
         else if (name == "EvalQueenMobility" && inRange(value, -100, 100))
             p.queenMobility = value;
+        else if (name == "EvalSpaceControl" && inRange(value, -100, 100))
+            p.spaceControl = value;
+        else if (name == "EvalInfiltrationKnight" && inRange(value, -100, 100))
+            p.infiltrationKnight = value;
+        else if (name == "EvalInfiltrationBishop" && inRange(value, -100, 100))
+            p.infiltrationBishop = value;
+        else if (name == "EvalInfiltrationRook" && inRange(value, -100, 100))
+            p.infiltrationRook = value;
+        else if (name == "EvalInfiltrationQueen" && inRange(value, -100, 100))
+            p.infiltrationQueen = value;
         else
             return false;
 
@@ -228,6 +243,11 @@ namespace ironphoenix::Tuning {
             << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
             << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
             << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
+            << "option name EvalSpaceControl type spin default 1 min -100 max 100\n"
+            << "option name EvalInfiltrationKnight type spin default 3 min -100 max 100\n"
+            << "option name EvalInfiltrationBishop type spin default 3 min -100 max 100\n"
+            << "option name EvalInfiltrationRook type spin default 2 min -100 max 100\n"
+            << "option name EvalInfiltrationQueen type spin default 1 min -100 max 100\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -256,7 +276,12 @@ namespace ironphoenix::Tuning {
             << " EvalKnightMobility=" << e.knightMobility
             << " EvalBishopMobility=" << e.bishopMobility
             << " EvalRookMobility=" << e.rookMobility
-            << " EvalQueenMobility=" << e.queenMobility << '\n';
+            << " EvalQueenMobility=" << e.queenMobility
+            << " EvalSpaceControl=" << e.spaceControl
+            << " EvalInfiltrationKnight=" << e.infiltrationKnight
+            << " EvalInfiltrationBishop=" << e.infiltrationBishop
+            << " EvalInfiltrationRook=" << e.infiltrationRook
+            << " EvalInfiltrationQueen=" << e.infiltrationQueen << '\n';
     }
 
 } // namespace ironphoenix::Tuning
