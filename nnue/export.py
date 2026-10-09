@@ -31,7 +31,7 @@ def export_network(model: PhoenixNet, output: Path, output_scale: float = 400.0)
     with output.open("wb") as f:
         f.write(MAGIC)
         f.write(struct.pack(
-            "<IIIII f",
+            "<IIIIIf",
             VERSION,
             FEATURE_COUNT,
             FT_SIZE,
@@ -46,8 +46,8 @@ def export_network(model: PhoenixNet, output: Path, output_scale: float = 400.0)
         _write_tensor(f, model.hidden1.bias)
         _write_tensor(f, model.hidden2.weight)
         _write_tensor(f, model.hidden2.bias)
-        _write_tensor(f, model.output.weight.view(-1))
-        _write_tensor(f, model.output.bias.view(()))
+        _write_tensor(f, model.output.weight.reshape(-1))
+        _write_tensor(f, model.output.bias.reshape(()))
 
 
 def load_checkpoint(path: Path) -> PhoenixNet:
