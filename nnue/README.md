@@ -40,9 +40,28 @@ IRONPHOENIX_NNUE=/path/to/network.nnue
 
 If no valid network is found, the engine automatically falls back to the existing handcrafted material + mobility evaluator.
 
+# MultiPV
+
+IronPhoenix exposes a UCI `MultiPV` option:
+
+```text
+setoption name MultiPV value 4
+```
+
+Valid values are `1..32`. `MultiPV=1` keeps the original PVS/aspiration search path unchanged. Values greater than one use a dedicated root MultiPV search and emit normal UCI lines such as:
+
+```text
+info depth 8 seldepth 18 multipv 1 score cp 74 ... pv ...
+info depth 8 seldepth 18 multipv 2 score cp 51 ... pv ...
+info depth 8 seldepth 18 multipv 3 score cp 29 ... pv ...
+info depth 8 seldepth 18 multipv 4 score cp 12 ... pv ...
+```
+
+The first line is the best move and is still returned as `bestmove`.
+
 # Creating the first dataset
 
-The CMake build now produces a second executable when `IRONPHOENIX_BUILD_DATASET_GENERATOR=ON`:
+The CMake build produces a second executable when `IRONPHOENIX_BUILD_DATASET_GENERATOR=ON`:
 
 ```text
 ironphoenix_dataset
@@ -71,9 +90,13 @@ A better first training set:
     --depth 8 `
     --workers 8 `
     --hash 16 `
-    --random-plies 4 `
-    --skip-plies 8 `
+    --random-plies 8 `
+    --skip-plies 12 `
     --sample-every 3 `
+    --exploration 0.15 `
+    --exploration-multipv 4 `
+    --exploration-temperature 120 `
+    --exploration-max-loss 250 `
     --output nnue\phoenix-v1.ipd
 ```
 
@@ -82,25 +105,71 @@ On a 16-core / 24-thread CPU, start around 8-12 generator workers. Each worker o
 Useful generator options:
 
 ```text
---positions N       number of samples to generate in this run
---append            safely append this run to an existing compatible .ipd file
---depth N           teacher search depth
---workers N         independent parallel self-play workers
---hash MB           transposition-table size per worker
---random-plies N    random legal opening plies for diversity
---skip-plies N      earliest ply that may be saved
---sample-every N    save one of every N searched positions
---max-plies N       maximum length of one self-play game
---cp-clamp N        clamp search CP before conversion to target
---score-scale N     CP represented by one network output unit
---seed N            deterministic opening RNG seed
+--positions N              number of new samples to generate in this run
+--append                   safely append this run to an existing compatible .ipd file
+--depth N                  teacher search depth
+--workers N                independent parallel self-play workers
+--hash MB                  transposition-table size per worker
+--random-plies N           random legal opening plies for diversity (default 8)
+--skip-plies N             earliest configured sample ply (default 12)
+--sample-every N           save one of every N searched positions
+--max-plies N              maximum length of one self-play game
+--cp-clamp N               clamp search CP before conversion to target
+--score-scale N            CP represented by one network output unit
+--exploration P            probability 0..1 of choosing a strong non-best move
+--exploration-multipv N    number of top root lines available to exploration
+--exploration-temperature N softmax temperature in centipawns
+--exploration-max-loss N   reject alternatives worse than best by more than N CP
+--dedup                    enable position-feature deduplication (default)
+--no-dedup                 disable deduplication
+--seed N                   deterministic opening RNG seed
 ```
+
+## Exploration
+
+The generator uses controlled search exploration instead of unrestricted random moves after the opening.
+
+With the default settings:
+
+```text
+--exploration 0.15
+--exploration-multipv 4
+--exploration-temperature 120
+--exploration-max-loss 250
+```
+
+IronPhoenix normally continues self-play with MultiPV #1. Exploration occasionally selects a different line among the other strong MultiPV candidates, weighted by score gap. Alternatives more than 250 centipawns below the best line are rejected.
+
+The important detail is that the **training target always remains MultiPV #1's evaluation**. Exploration changes only the move used to continue self-play. This increases position variety without teaching the network that an intentionally exploratory move was the best evaluation.
+
+Set:
+
+```text
+--exploration 0
+```
+
+to disable search exploration completely.
+
+## Opening diversity and deduplication
+
+The generator deliberately avoids repeatedly training on the initial position:
+
+- the starting position is never eligible to be saved
+- the default opening phase makes 8 random non-terminal legal plies
+- sampling starts no earlier than the maximum of ply 1, `--random-plies`, and `--skip-plies`
+- default `--skip-plies 12` therefore keeps the earliest repeated opening states out of the dataset
+
+Deduplication is enabled by default. Before writing a record, the generator hashes its exact PhoenixNet own-king and partner-king sparse feature streams plus side to move. If that same neural input has already been saved, the duplicate is skipped and generation continues until the requested number of **unique** samples is reached.
+
+When `--append` is used, IronPhoenix scans the existing `.ipd` file first and preloads those feature fingerprints. This means the duplicate filter also works across later append runs, not just within one process invocation.
+
+This fingerprint is intentionally based on the neural input rather than the raw FEN. Positions with the same PhoenixNet feature representation are treated as duplicates, which is useful for reducing over-representation in NNUE training.
 
 ## Continuing an existing dataset
 
 Use `--append` to grow an existing `.ipd` file without erasing its current records.
 
-If `phoenix-v1.ipd` already contains 500,000 positions, this command adds another 500,000:
+If `phoenix-v1.ipd` already contains 500,000 positions, this command adds another 500,000 unique samples:
 
 ```powershell
 .\build\Release\ironphoenix_dataset.exe `
@@ -109,6 +178,8 @@ If `phoenix-v1.ipd` already contains 500,000 positions, this command adds anothe
     --depth 8 `
     --workers 8 `
     --hash 16 `
+    --exploration 0.15 `
+    --exploration-multipv 4 `
     --output nnue\phoenix-v1.ipd
 ```
 
@@ -122,7 +193,7 @@ Append mode is deliberately strict. Before modifying the existing file it valida
 - teacher search depth
 - score scale
 
-If those do not match, the append is refused and the existing dataset is left unchanged. Settings that are meant to add diversity, such as random opening plies or sampling cadence, may be changed between append runs.
+If those do not match, the append is refused and the existing dataset is left unchanged. Settings intended to add diversity, such as opening randomization, exploration probability, or sampling cadence, may be changed between append runs.
 
 If `--seed` is not supplied during an append, IronPhoenix derives a different deterministic seed from the original dataset seed and its current record count. This avoids regenerating the exact same random opening sequence. Supplying `--seed` explicitly overrides this behavior.
 
@@ -132,7 +203,7 @@ The record count is committed only after all new records are flushed. If an appe
 
 If `--append` is used and the output file does not exist yet, the generator simply creates a new dataset normally.
 
-Mate scores are not written as ordinary training targets. Non-mate search scores are side-to-move-team relative, clipped to `--cp-clamp`, and divided by `--score-scale` before storage.
+Mate scores are not written as ordinary training targets. Non-mate best-line search scores are side-to-move-team relative, clipped to `--cp-clamp`, and divided by `--score-scale` before storage.
 
 ## Native IPD dataset format
 
@@ -145,7 +216,7 @@ Mate scores are not written as ordinary training targets. Non-mate search scores
 - game ID
 - ply
 - side to move
-- flags for check/eliminated-player state
+- flags for check, eliminated-player state, and whether the continuation move was exploratory
 
 Feature indices are stored as `uint16` because PhoenixNet v1 has 65,280 features.
 
