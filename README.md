@@ -37,6 +37,7 @@ IronPhoenix includes a modern alpha-beta search stack designed specifically for 
 - History-based move ordering
 - Static Exchange Evaluation (SEE)
 - Late Move Reductions (LMR)
+- Late Move Pruning (LMP)
 - Search pruning and reductions
 - Iterative deepening
 - Principal variation reporting
