@@ -22,6 +22,10 @@ namespace ironphoenix {
             0, 0, 4, 4, 2, 1, 0
         };
 
+        constexpr int SEE_PRUNE_MAX_DEPTH = 4;
+        constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
+        constexpr int QSEARCH_SEE_THRESHOLD = -50;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
@@ -371,6 +375,7 @@ namespace ironphoenix {
                 break;
 
             const bool terminalKingCapture = isTerminalKingCapture(pos, move);
+            const bool givesCheckMove = !terminalKingCapture && pos.givesCheck(move);
             int score = -INF;
             bool legal = true;
 
@@ -499,6 +504,22 @@ namespace ironphoenix {
             bool legal = true;
 
             const bool quiet = !move.isCapture() && !move.isPromotion();
+            const int mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
+                && !terminalKingCapture;
+
+            if (!pvNode
+                && !inCheckNode
+                && depth <= SEE_PRUNE_MAX_DEPTH
+                && legalMoves > 0
+                && move.isCapture()
+                && !move.isPromotion()
+                && move != ttMove
+                && !givesCheckMove
+                && !mateWindow) {
+                const int seeThreshold = -SEE_PRUNE_MARGIN_PER_DEPTH * depth;
+                if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
+                    continue;
+            }
 
             if (terminalKingCapture) {
                 score = MATE_SCORE - (ply + 1);
