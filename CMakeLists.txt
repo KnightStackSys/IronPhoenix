@@ -25,6 +25,7 @@ add_library(ironphoenix_core STATIC
     src/eval.cpp
     src/nnue.cpp
     src/search.cpp
+    src/multipv.cpp
     src/fen.cpp
     src/movegen.cpp
     src/preft.cpp
