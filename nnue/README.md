@@ -4,17 +4,17 @@ PhoenixNet is IronPhoenix's first neural evaluator for four-player Teams chess.
 
 ## 🏗️ Architecture
 
-- 🗺️ 160 playable squares on the 14x14 cross board
-- 🎨 4 relative colors: self, next enemy, partner, previous enemy
-- ♟️ 6 piece types
-- 👑 17 king buckets: 16 spatial buckets plus one missing/eliminated-king bucket
-- 🔢 shared sparse feature transformer: `65280 -> 128`
-- 🧩 two accumulator streams evaluated from side-to-move's perspective:
+- 160 playable squares on the 14x14 cross board
+- 4 relative colors: self, next enemy, partner, previous enemy
+- 6 piece types
+- 17 king buckets: 16 spatial buckets plus one missing/eliminated-king bucket
+- shared sparse feature transformer: `65280 -> 128`
+- two accumulator streams evaluated from side-to-move's perspective:
   - current player's king
   - partner king
-- 🔗 concatenated dense input: `256`
-- 🧠 hidden layers: `32 -> 32`
-- 📏 scalar output converted to a centipawn-like score
+- concatenated dense input: `256`
+- hidden layers: `32 -> 32`
+- scalar output converted to a centipawn-like score
 
 The engine score is always side-to-move-team relative. Positive values favor the team of the player whose turn it is.
 
@@ -102,12 +102,12 @@ Exploration no longer forces every teacher search through MultiPV.
 
 With `--exploration 0.15`:
 
-- ⚡ about 85% of eligible teacher searches stay normal single-PV searches
-- 🔀 about 15% are selected up front for MultiPV exploration
-- 🕒 exploration is limited to ply 96 and earlier
-- 🏁 positions after ply 96 always use single-PV search
-- 🛡️ if an exploration search has no acceptable alternative within `--exploration-max-loss`, the best move is still used
-- 🎯 the training target always remains MultiPV #1's evaluation
+- about 85% of eligible teacher searches stay normal single-PV searches
+- about 15% are selected up front for MultiPV exploration
+- exploration is limited to ply 96 and earlier
+- positions after ply 96 always use single-PV search
+- if an exploration search has no acceptable alternative within `--exploration-max-loss`, the best move is still used
+- the training target always remains MultiPV #1's evaluation
 
 This preserves diversity while avoiding the old behavior where MultiPV was paid for on 100% of searches even though only a small fraction actually explored.
 
@@ -175,14 +175,14 @@ Older abruptly interrupted files with stale header counts are scanned for comple
 
 `ironphoenix_dataset` writes a compact little-endian `IPDATA1` stream. Each record contains:
 
-- 🧩 own-king sparse feature indices
-- 🤝 partner-king sparse feature indices
-- 🎯 scaled training target
-- 📏 original teacher centipawn score
-- 🎮 game ID
-- 🔢 ply
-- 🔄 side to move
-- 🚩 flags for check, eliminated-player state, and whether the continuation move was exploratory
+- own-king sparse feature indices
+- partner-king sparse feature indices
+- scaled training target
+- original teacher centipawn score
+- game ID
+- ply
+- side to move
+- flags for check, eliminated-player state, and whether the continuation move was exploratory
 
 Feature indices are stored as `uint16` because PhoenixNet v1 has 65,280 features.
 
@@ -269,12 +269,12 @@ PhoenixNet v1 intentionally starts with full accumulator refreshes. This gives a
 
 Next stages:
 
-1. ⚡ add make/undo incremental accumulator updates
-2. 👥 maintain four seat perspectives and own/partner king streams
-3. 👑 refresh only streams whose king bucket changes
-4. 📦 quantize feature-transformer weights to int16
-5. 🔢 quantize dense weights to int8 with int32 accumulation
-6. 🚀 add AVX2 inference
-7. 🧪 SPRT optimized implementations against the reference implementation
+1. add make/undo incremental accumulator updates
+2. maintain four seat perspectives and own/partner king streams
+3. refresh only streams whose king bucket changes
+4. quantize feature-transformer weights to int16
+5. quantize dense weights to int8 with int32 accumulation
+6. add AVX2 inference
+7. SPRT optimized implementations against the reference implementation
 
 Do not remove the refresh implementation until incremental make/undo tests prove eval equivalence across captures, promotions, en-passant, castling, and king bucket changes.
