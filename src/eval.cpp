@@ -3,20 +3,36 @@
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/nnue.hpp"
 #include "ironphoenix/position.hpp"
-
-#include <array>
+#include "ironphoenix/tuning.hpp"
 
 namespace ironphoenix::Eval {
 
     namespace {
 
-        constexpr std::array<int, PIECE_TYPE_NB> EVAL_VALUE = {
-            0, 100, 300, 400, 500, 1000, 0
-        };
+        IRONPHOENIX_FORCE_INLINE int evalValue(PieceType pt) noexcept {
+            const auto& params = Tuning::eval();
 
-        constexpr std::array<int, PIECE_TYPE_NB> MOBILITY_WEIGHT = {
-            0, 0, 4, 4, 2, 1, 0
-        };
+            switch (pt) {
+            case PAWN:   return params.pawnValue;
+            case KNIGHT: return params.knightValue;
+            case BISHOP: return params.bishopValue;
+            case ROOK:   return params.rookValue;
+            case QUEEN:  return params.queenValue;
+            default:     return 0;
+            }
+        }
+
+        IRONPHOENIX_FORCE_INLINE int mobilityWeight(PieceType pt) noexcept {
+            const auto& params = Tuning::eval();
+
+            switch (pt) {
+            case KNIGHT: return params.knightMobility;
+            case BISHOP: return params.bishopMobility;
+            case ROOK:   return params.rookMobility;
+            case QUEEN:  return params.queenMobility;
+            default:     return 0;
+            }
+        }
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -28,7 +44,7 @@ namespace ironphoenix::Eval {
 
             for (unsigned pt = PAWN; pt <= QUEEN; ++pt) {
                 material += pos.pieces(c, static_cast<PieceType>(pt)).popcount()
-                    * EVAL_VALUE[pt];
+                    * evalValue(static_cast<PieceType>(pt));
             }
 
             return material;
@@ -65,7 +81,7 @@ namespace ironphoenix::Eval {
                     }
 
                     const int mobility = (attacks & ~blockedByTeam).popcount();
-                    score += mobility * MOBILITY_WEIGHT[static_cast<unsigned>(pt)];
+                    score += mobility * mobilityWeight(pt);
                 }
             };
 
@@ -100,6 +116,10 @@ namespace ironphoenix::Eval {
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 
+    }
+
+    Parameters& parameters() noexcept {
+        return Tuning::eval();
     }
 
     int evaluate(const Position& pos) noexcept {

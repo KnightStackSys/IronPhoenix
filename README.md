@@ -32,6 +32,7 @@ IronPhoenix includes a modern alpha-beta search stack designed specifically for 
 
 - Negamax / PVS-style search
 - Quiescence search
+- Aspiration Windows
 - Transposition tables
 - History-based move ordering
 - Static Exchange Evaluation (SEE)
