@@ -82,7 +82,8 @@ On a 16-core / 24-thread CPU, start around 8-12 generator workers. Each worker o
 Useful generator options:
 
 ```text
---positions N       target number of saved training samples
+--positions N       number of samples to generate in this run
+--append            safely append this run to an existing compatible .ipd file
 --depth N           teacher search depth
 --workers N         independent parallel self-play workers
 --hash MB           transposition-table size per worker
@@ -94,6 +95,42 @@ Useful generator options:
 --score-scale N     CP represented by one network output unit
 --seed N            deterministic opening RNG seed
 ```
+
+## Continuing an existing dataset
+
+Use `--append` to grow an existing `.ipd` file without erasing its current records.
+
+If `phoenix-v1.ipd` already contains 500,000 positions, this command adds another 500,000:
+
+```powershell
+.\build\Release\ironphoenix_dataset.exe `
+    --append `
+    --positions 500000 `
+    --depth 8 `
+    --workers 8 `
+    --hash 16 `
+    --output nnue\phoenix-v1.ipd
+```
+
+After the run the dataset contains 1,000,000 positions. In append mode, `--positions` always means the number of **new** positions to add during that run.
+
+Append mode is deliberately strict. Before modifying the existing file it validates:
+
+- `IPDATA1` version
+- PhoenixNet feature count
+- maximum sparse feature count
+- teacher search depth
+- score scale
+
+If those do not match, the append is refused and the existing dataset is left unchanged. Settings that are meant to add diversity, such as random opening plies or sampling cadence, may be changed between append runs.
+
+If `--seed` is not supplied during an append, IronPhoenix derives a different deterministic seed from the original dataset seed and its current record count. This avoids regenerating the exact same random opening sequence. Supplying `--seed` explicitly overrides this behavior.
+
+Appended game IDs are automatically shifted above the highest existing game ID. This preserves game-level train/validation splitting even after many append runs.
+
+The record count is committed only after all new records are flushed. If an append is interrupted after data reaches disk but before the count is committed, the next `--append` run detects and safely removes those uncommitted trailing bytes before continuing.
+
+If `--append` is used and the output file does not exist yet, the generator simply creates a new dataset normally.
 
 Mate scores are not written as ordinary training targets. Non-mate search scores are side-to-move-team relative, clipped to `--cp-clamp`, and divided by `--score-scale` before storage.
 
