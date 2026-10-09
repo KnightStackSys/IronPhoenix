@@ -58,7 +58,11 @@ namespace ironphoenix::Tuning {
                 || name == "EvalKnightMobility"
                 || name == "EvalBishopMobility"
                 || name == "EvalRookMobility"
-                || name == "EvalQueenMobility";
+                || name == "EvalQueenMobility"
+                || name == "EvalDevelopmentKnight"
+                || name == "EvalDevelopmentBishop"
+                || name == "EvalDevelopmentRook"
+                || name == "EvalDevelopmentQueen";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -155,6 +159,14 @@ namespace ironphoenix::Tuning {
             p.rookMobility = value;
         else if (name == "EvalQueenMobility" && inRange(value, -100, 100))
             p.queenMobility = value;
+        else if (name == "EvalDevelopmentKnight" && inRange(value, -100, 100))
+            p.developmentKnight = value;
+        else if (name == "EvalDevelopmentBishop" && inRange(value, -100, 100))
+            p.developmentBishop = value;
+        else if (name == "EvalDevelopmentRook" && inRange(value, -100, 100))
+            p.developmentRook = value;
+        else if (name == "EvalDevelopmentQueen" && inRange(value, -100, 100))
+            p.developmentQueen = value;
         else
             return false;
 
@@ -228,6 +240,10 @@ namespace ironphoenix::Tuning {
             << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
             << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
             << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
+            << "option name EvalDevelopmentKnight type spin default 8 min -100 max 100\n"
+            << "option name EvalDevelopmentBishop type spin default 8 min -100 max 100\n"
+            << "option name EvalDevelopmentRook type spin default 2 min -100 max 100\n"
+            << "option name EvalDevelopmentQueen type spin default 0 min -100 max 100\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -256,7 +272,11 @@ namespace ironphoenix::Tuning {
             << " EvalKnightMobility=" << e.knightMobility
             << " EvalBishopMobility=" << e.bishopMobility
             << " EvalRookMobility=" << e.rookMobility
-            << " EvalQueenMobility=" << e.queenMobility << '\n';
+            << " EvalQueenMobility=" << e.queenMobility
+            << " EvalDevelopmentKnight=" << e.developmentKnight
+            << " EvalDevelopmentBishop=" << e.developmentBishop
+            << " EvalDevelopmentRook=" << e.developmentRook
+            << " EvalDevelopmentQueen=" << e.developmentQueen << '\n';
     }
 
 } // namespace ironphoenix::Tuning
