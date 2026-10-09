@@ -5,6 +5,8 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
+#include <algorithm>
+
 namespace ironphoenix::Eval {
 
     namespace {
@@ -127,19 +129,15 @@ namespace ironphoenix::Eval {
             return score;
         }
 
-        int kingPressureForColor(const Position& pos, Color c) noexcept {
+        int kingPressureForTeam(const Position& pos, int attackingTeam) noexcept {
             const Bitboard occ = pos.occupancy();
             const auto& params = Tuning::eval();
-            const int ourTeam = teamOf(c);
 
             int score = 0;
 
-            // In Teams, each player contributes pressure against both enemy
-            // kings. Summing playerScore() for the two partners naturally
-            // combines their attacks into one team score.
             for (unsigned enemyIndex = 0; enemyIndex < COLOR_NB; ++enemyIndex) {
                 const Color enemy = static_cast<Color>(enemyIndex);
-                if (teamOf(enemy) == ourTeam)
+                if (teamOf(enemy) == attackingTeam)
                     continue;
 
                 const Square king = pos.kingSquare(enemy);
@@ -147,27 +145,59 @@ namespace ironphoenix::Eval {
                     continue;
 
                 const Bitboard kingRing = Geometry::KingAttacks[king];
+                Bitboard coveredRing{};
+                int attackerCount = 0;
+                int attackUnits = 0;
+                int directAttackers = 0;
 
-                for (unsigned ptIndex = PAWN; ptIndex <= QUEEN; ++ptIndex) {
-                    const PieceType pt = static_cast<PieceType>(ptIndex);
-                    const int weight = kingPressureWeight(pt);
-                    Bitboard pieces = pos.pieces(c, pt);
+                // Evaluate the two partners together. This prevents the same
+                // king-ring square from being rewarded twice just because both
+                // partners attack it, while still rewarding real coordination.
+                for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                    const Color c = static_cast<Color>(ci);
+                    if (teamOf(c) != attackingTeam)
+                        continue;
 
-                    while (pieces) {
-                        const Square sq = popLsb(pieces);
-                        const Bitboard attacks = attacksFrom(c, pt, sq, occ);
+                    for (unsigned ptIndex = PAWN; ptIndex <= QUEEN; ++ptIndex) {
+                        const PieceType pt = static_cast<PieceType>(ptIndex);
+                        Bitboard pieces = pos.pieces(c, pt);
 
-                        // Every controlled escape/adjacent square adds pressure.
-                        // Multiple attackers deliberately stack: coordinated
-                        // attacks from partners are especially important in 4PC.
-                        score += (attacks & kingRing).popcount() * weight;
+                        while (pieces) {
+                            const Square sq = popLsb(pieces);
+                            const Bitboard attacks = attacksFrom(c, pt, sq, occ);
+                            const Bitboard ringHits = attacks & kingRing;
+                            const bool directAttack = attacks.test(king);
 
-                        // A direct attack on the king is much more urgent in
-                        // IronPhoenix because an enemy king capture is terminal.
-                        if (attacks.test(king))
-                            score += params.kingPressureCheckBonus;
+                            if (!ringHits && !directAttack)
+                                continue;
+
+                            ++attackerCount;
+                            attackUnits += kingPressureWeight(pt);
+                            coveredRing |= ringHits;
+
+                            if (directAttack)
+                                ++directAttackers;
+                        }
                     }
                 }
+
+                // A single piece hovering near the king is usually tactical
+                // noise that search can resolve. Require coordinated pressure
+                // before awarding the positional king-zone term.
+                if (attackerCount >= 2) {
+                    const int coverage = coveredRing.popcount();
+                    const int coordinatedAttackers = std::min(attackerCount, 4);
+
+                    score += attackUnits;
+                    score += coverage * 2;
+                    score += (coordinatedAttackers - 1) * 2;
+                }
+
+                // Direct king attacks still matter because king capture is
+                // terminal in 4PC, but cap repeated bonuses so the evaluation
+                // does not drown out material and mobility.
+                if (directAttackers > 0)
+                    score += std::min(directAttackers, 2) * params.kingPressureCheckBonus;
             }
 
             return score;
@@ -175,8 +205,7 @@ namespace ironphoenix::Eval {
 
         int playerScore(const Position& pos, Color c) noexcept {
             return materialForColor(pos, c)
-                + mobilityForColor(pos, c)
-                + kingPressureForColor(pos, c);
+                + mobilityForColor(pos, c);
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
@@ -192,6 +221,9 @@ namespace ironphoenix::Eval {
                 else
                     team1 += score;
             }
+
+            team0 += kingPressureForTeam(pos, 0);
+            team1 += kingPressureForTeam(pos, 1);
 
             const int score = team0 - team1;
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
