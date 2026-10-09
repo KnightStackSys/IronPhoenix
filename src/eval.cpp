@@ -132,6 +132,7 @@ namespace ironphoenix::Eval {
         int kingPressureForTeam(const Position& pos, int attackingTeam) noexcept {
             const Bitboard occ = pos.occupancy();
             const auto& params = Tuning::eval();
+            const Color sideToMove = pos.sideToMove();
 
             int score = 0;
 
@@ -144,15 +145,22 @@ namespace ironphoenix::Eval {
                 if (king == SQ_NONE)
                     continue;
 
-                const Bitboard kingRing = Geometry::KingAttacks[king];
-                Bitboard coveredRing{};
+                // Only score king-ring squares the defending king could at least
+                // potentially use. Friendly pieces around the defending king are
+                // shields, not escape squares, so do not reward pseudo-pressure
+                // against those occupied squares.
+                const Bitboard kingZone = Geometry::KingAttacks[king]
+                    & ~teamOccupancy(pos, enemy);
+
+                Bitboard coveredZone{};
                 int attackerCount = 0;
                 int attackUnits = 0;
-                int directAttackers = 0;
+                bool immediateDirectAttack = false;
 
-                // Evaluate the two partners together. This prevents the same
-                // king-ring square from being rewarded twice just because both
-                // partners attack it, while still rewarding real coordination.
+                // Evaluate the two partners together so overlapping pressure is
+                // counted once. Positional king pressure may come from either
+                // partner, but a direct king attack is only immediately urgent
+                // when it belongs to the actual side to move.
                 for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                     const Color c = static_cast<Color>(ci);
                     if (teamOf(c) != attackingTeam)
@@ -160,44 +168,48 @@ namespace ironphoenix::Eval {
 
                     for (unsigned ptIndex = PAWN; ptIndex <= QUEEN; ++ptIndex) {
                         const PieceType pt = static_cast<PieceType>(ptIndex);
+                        const int weight = kingPressureWeight(pt);
                         Bitboard pieces = pos.pieces(c, pt);
 
                         while (pieces) {
                             const Square sq = popLsb(pieces);
                             const Bitboard attacks = attacksFrom(c, pt, sq, occ);
-                            const Bitboard ringHits = attacks & kingRing;
+                            const Bitboard zoneHits = attacks & kingZone;
                             const bool directAttack = attacks.test(king);
 
-                            if (!ringHits && !directAttack)
-                                continue;
+                            // A zero weight cleanly disables this piece type from
+                            // the positional king-pressure term while preserving
+                            // genuinely immediate king attacks.
+                            if (weight != 0 && zoneHits) {
+                                ++attackerCount;
+                                attackUnits += weight;
+                                coveredZone |= zoneHits;
+                            }
 
-                            ++attackerCount;
-                            attackUnits += kingPressureWeight(pt);
-                            coveredRing |= ringHits;
-
-                            if (directAttack)
-                                ++directAttackers;
+                            if (c == sideToMove && directAttack)
+                                immediateDirectAttack = true;
                         }
                     }
                 }
 
-                // A single piece hovering near the king is usually tactical
-                // noise that search can resolve. Require coordinated pressure
-                // before awarding the positional king-zone term.
-                if (attackerCount >= 2) {
-                    const int coverage = coveredRing.popcount();
+                const int coverage = coveredZone.popcount();
+
+                // Require both multiple attackers and multiple useful king-zone
+                // squares. This filters out single-ray and one-square pressure
+                // that search already handles well.
+                if (attackerCount >= 2 && coverage >= 2) {
                     const int coordinatedAttackers = std::min(attackerCount, 4);
 
                     score += attackUnits;
-                    score += coverage * 2;
-                    score += (coordinatedAttackers - 1) * 2;
+                    score += coverage;
+                    score += coordinatedAttackers - 1;
                 }
 
-                // Direct king attacks still matter because king capture is
-                // terminal in 4PC, but cap repeated bonuses so the evaluation
-                // does not drown out material and mobility.
-                if (directAttackers > 0)
-                    score += std::min(directAttackers, 2) * params.kingPressureCheckBonus;
+                // King capture is terminal, but extra checking pieces do not make
+                // one available king capture more terminal. Award this once per
+                // enemy king and only to the color that can move right now.
+                if (immediateDirectAttack)
+                    score += params.kingPressureCheckBonus;
             }
 
             return score;
