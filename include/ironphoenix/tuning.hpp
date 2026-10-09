@@ -34,6 +34,16 @@ namespace ironphoenix {
             int bishopMobility = 4;
             int rookMobility = 2;
             int queenMobility = 1;
+
+            // King-pressure weights are applied for every square an attacking
+            // piece controls in an enemy king's adjacent ring. A direct attack
+            // on the king receives the additional check bonus.
+            int kingPressurePawn = 2;
+            int kingPressureKnight = 4;
+            int kingPressureBishop = 4;
+            int kingPressureRook = 5;
+            int kingPressureQueen = 6;
+            int kingPressureCheckBonus = 16;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;
