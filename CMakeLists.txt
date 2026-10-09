@@ -120,7 +120,7 @@ endif()
 
 if(IRONPHOENIX_BUILD_DATASET_GENERATOR)
     add_executable(ironphoenix_dataset
-        tools/nnue_dataset.cpp
+        tools/nnue_dataset_with_append.cpp
     )
     target_link_libraries(ironphoenix_dataset PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_dataset PRIVATE cxx_std_20)
