@@ -12,6 +12,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 option(IRONPHOENIX_BUILD_TESTS "Build IronPhoenix correctness tests" ON)
 option(IRONPHOENIX_BUILD_BENCHMARK "Build IronPhoenix microbenchmark" ON)
+option(IRONPHOENIX_BUILD_DATASET_GENERATOR "Build PhoenixNet dataset generator" ON)
 
 add_library(ironphoenix_core STATIC
     src/geometry.cpp
@@ -115,6 +116,46 @@ endif()
 if(IRONPHOENIX_IPO_SUPPORTED)
     set_property(TARGET ironphoenix PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     set_property(TARGET ironphoenix PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+endif()
+
+if(IRONPHOENIX_BUILD_DATASET_GENERATOR)
+    add_executable(ironphoenix_dataset
+        tools/nnue_dataset.cpp
+    )
+    target_link_libraries(ironphoenix_dataset PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_dataset PRIVATE cxx_std_20)
+    set_target_properties(ironphoenix_dataset PROPERTIES
+        OUTPUT_NAME "ironphoenix_dataset"
+        FOLDER "Tools"
+    )
+
+    if(MSVC)
+        target_compile_options(ironphoenix_dataset PRIVATE
+            /W4
+            /permissive-
+            /Zc:__cplusplus
+            /MP
+            $<$<CONFIG:Release>:/O2>
+            $<$<CONFIG:Release>:/Oi>
+            $<$<CONFIG:Release>:/Ot>
+            $<$<CONFIG:RelWithDebInfo>:/O2>
+            $<$<CONFIG:RelWithDebInfo>:/Oi>
+            $<$<CONFIG:RelWithDebInfo>:/Ot>
+        )
+    else()
+        target_compile_options(ironphoenix_dataset PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+            $<$<CONFIG:Release>:-O3>
+            $<$<CONFIG:RelWithDebInfo>:-O3>
+        )
+    endif()
+
+    if(IRONPHOENIX_IPO_SUPPORTED)
+        set_property(TARGET ironphoenix_dataset PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+        set_property(TARGET ironphoenix_dataset PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+    endif()
 endif()
 
 if(IRONPHOENIX_BUILD_TESTS)
