@@ -22,7 +22,6 @@ namespace ironphoenix {
         constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
         constexpr int QSEARCH_SEE_THRESHOLD = -50;
 
-        constexpr int LMP_MAX_DEPTH = 4;
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
@@ -447,13 +446,12 @@ namespace ironphoenix {
             const int mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
-            // Late Move Pruning (LMP): at shallow non-PV nodes, stop spending
-            // search effort on late quiet moves unless history says the move is
+            // Late Move Pruning (LMP): at non-PV nodes, stop spending search
+            // effort on late quiet moves unless history says the move is
             // promising. Checks, TT moves, promotions/captures, and mate-window
-            // searches are never pruned here.
+            // searches are never pruned here. This intentionally has no depth cap.
             if (!pvNode
                 && !inCheckNode
-                && depth <= LMP_MAX_DEPTH
                 && legalMoves >= 3 + depth * depth
                 && quiet
                 && move != ttMove
