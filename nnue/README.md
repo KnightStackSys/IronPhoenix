@@ -107,6 +107,7 @@ Useful generator options:
 ```text
 --positions N              number of new samples to generate in this run
 --append                   safely append this run to an existing compatible .ipd file
+--resume                   continue an existing dataset toward --positions total
 --depth N                  teacher search depth
 --workers N                independent parallel self-play workers
 --hash MB                  transposition-table size per worker
@@ -116,7 +117,7 @@ Useful generator options:
 --max-plies N              maximum length of one self-play game
 --cp-clamp N               clamp search CP before conversion to target
 --score-scale N            CP represented by one network output unit
---exploration P            probability 0..1 of choosing a strong non-best move
+--exploration P            probability 0..1 of using MultiPV exploration
 --exploration-multipv N    number of top root lines available to exploration
 --exploration-temperature N softmax temperature in centipawns
 --exploration-max-loss N   reject alternatives worse than best by more than N CP
@@ -138,7 +139,9 @@ With the default settings:
 --exploration-max-loss 250
 ```
 
-IronPhoenix normally continues self-play with MultiPV #1. Exploration occasionally selects a different line among the other strong MultiPV candidates, weighted by score gap. Alternatives more than 250 centipawns below the best line are rejected.
+IronPhoenix now performs a normal single-PV teacher search on most positions. Only positions selected by the exploration probability pay for the MultiPV search. With `--exploration 0.15`, about 85% of eligible teacher searches remain single-PV and about 15% use MultiPV. Exploration is also limited to ply 96 and earlier; later positions always use the faster single-PV teacher search.
+
+When an exploration search is selected, IronPhoenix normally continues self-play with MultiPV #1 but may select another strong line, weighted by score gap. Alternatives more than 250 centipawns below the best line are rejected.
 
 The important detail is that the **training target always remains MultiPV #1's evaluation**. Exploration changes only the move used to continue self-play. This increases position variety without teaching the network that an intentionally exploratory move was the best evaluation.
 
@@ -161,49 +164,29 @@ The generator deliberately avoids repeatedly training on the initial position:
 
 Deduplication is enabled by default. Before writing a record, the generator hashes its exact PhoenixNet own-king and partner-king sparse feature streams plus side to move. If that same neural input has already been saved, the duplicate is skipped and generation continues until the requested number of **unique** samples is reached.
 
-When `--append` is used, IronPhoenix scans the existing `.ipd` file first and preloads those feature fingerprints. This means the duplicate filter also works across later append runs, not just within one process invocation.
+When `--append` or `--resume` is used, IronPhoenix scans the existing `.ipd` file first and preloads those feature fingerprints. This means the duplicate filter also works across later runs, not just within one process invocation.
 
-This fingerprint is intentionally based on the neural input rather than the raw FEN. Positions with the same PhoenixNet feature representation are treated as duplicates, which is useful for reducing over-representation in NNUE training.
+## Graceful stop and resume
 
-## Continuing an existing dataset
+Press `Ctrl+C` once to stop the current generation safely. Active searches are stopped, workers exit, completed records are flushed, and the dataset header count is committed before the process returns.
 
-Use `--append` to grow an existing `.ipd` file without erasing its current records.
-
-If `phoenix-v1.ipd` already contains 500,000 positions, this command adds another 500,000 unique samples:
+Resume toward a total size with:
 
 ```powershell
 .\build\Release\ironphoenix_dataset.exe `
-    --append `
+    --resume `
     --positions 500000 `
     --depth 8 `
     --workers 8 `
     --hash 16 `
-    --exploration 0.15 `
-    --exploration-multipv 4 `
     --output nnue\phoenix-v1.ipd
 ```
 
-After the run the dataset contains 1,000,000 positions. In append mode, `--positions` always means the number of **new** positions to add during that run.
+If the dataset already contains 50,000 records, `--resume --positions 500000` generates the remaining 450,000. By contrast, `--append --positions 500000` adds another 500,000 records.
 
-Append mode is deliberately strict. Before modifying the existing file it validates:
+Progress is reported every 10 saved positions.
 
-- `IPDATA1` version
-- PhoenixNet feature count
-- maximum sparse feature count
-- teacher search depth
-- score scale
-
-If those do not match, the append is refused and the existing dataset is left unchanged. Settings intended to add diversity, such as opening randomization, exploration probability, or sampling cadence, may be changed between append runs.
-
-If `--seed` is not supplied during an append, IronPhoenix derives a different deterministic seed from the original dataset seed and its current record count. This avoids regenerating the exact same random opening sequence. Supplying `--seed` explicitly overrides this behavior.
-
-Appended game IDs are automatically shifted above the highest existing game ID. This preserves game-level train/validation splitting even after many append runs.
-
-The record count is committed only after all new records are flushed. If an append is interrupted after data reaches disk but before the count is committed, the next `--append` run detects and safely removes those uncommitted trailing bytes before continuing.
-
-If `--append` is used and the output file does not exist yet, the generator simply creates a new dataset normally.
-
-Mate scores are not written as ordinary training targets. Non-mate best-line search scores are side-to-move-team relative, clipped to `--cp-clamp`, and divided by `--score-scale` before storage.
+Older abruptly-stopped datasets with stale header counts can be recovered: complete trailing records are scanned and committed, while only an incomplete final record is discarded.
 
 ## Native IPD dataset format
 
