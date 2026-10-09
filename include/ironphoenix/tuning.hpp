@@ -34,6 +34,18 @@ namespace ironphoenix {
             int bishopMobility = 4;
             int rookMobility = 2;
             int queenMobility = 1;
+
+            // King-pressure piece weights are applied once per meaningful
+            // attacker that reaches usable squares around an enemy king.
+            // Pawn pressure starts disabled because pawn pseudo-attacks were
+            // especially noisy in early SPRT runs. Direct attacks on the king
+            // receive a smaller tempo-aware bonus only for the side to move.
+            int kingPressurePawn = 0;
+            int kingPressureKnight = 3;
+            int kingPressureBishop = 3;
+            int kingPressureRook = 4;
+            int kingPressureQueen = 5;
+            int kingPressureCheckBonus = 12;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;
