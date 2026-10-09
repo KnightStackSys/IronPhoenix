@@ -22,9 +22,21 @@ namespace ironphoenix {
         constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
         constexpr int QSEARCH_SEE_THRESHOLD = -50;
 
+        constexpr int NULL_MOVE_MIN_DEPTH = 4;
+        constexpr int NULL_MOVE_BASE_REDUCTION = 2;
+        constexpr int NULL_MOVE_DEPTH_DIVISOR = 4;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool hasNonPawnMaterial(const Position& pos, Color c) noexcept {
+            const Bitboard pieces = pos.pieces(c, KNIGHT)
+                | pos.pieces(c, BISHOP)
+                | pos.pieces(c, ROOK)
+                | pos.pieces(c, QUEEN);
+            return static_cast<bool>(pieces);
         }
 
     }
@@ -385,7 +397,7 @@ namespace ironphoenix {
         return bestScore;
     }
 
-    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode) {
+    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
@@ -413,12 +425,57 @@ namespace ironphoenix {
         }
 
         const bool inCheckNode = pos.inCheck();
+        const Color us = pos.sideToMove();
+        const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
+
+        // Null Move Pruning (NMP): if the current player can effectively pass
+        // and the opposing team still cannot push the score below beta, normal
+        // moves are very likely to cause the same fail-high. Keep this away
+        // from PV nodes, checks, mate windows, pawn-only zugzwang positions,
+        // and consecutive null moves.
+        if (allowNull
+            && !pvNode
+            && ply > 0
+            && depth >= NULL_MOVE_MIN_DEPTH
+            && !inCheckNode
+            && !mateWindow
+            && hasNonPawnMaterial(pos, us)) {
+
+            const int staticEval = evaluate(pos);
+            if (staticEval >= beta) {
+                StateInfo nullState;
+                pos.makeNullMove(nullState);
+                searchStack_[ply + 1] = HistoryContext{};
+
+                const int reduction = NULL_MOVE_BASE_REDUCTION
+                    + depth / NULL_MOVE_DEPTH_DIVISOR;
+                const int nullDepth = std::max(0, depth - 1 - reduction);
+
+                const int nullScore = -negamax(
+                    pos,
+                    nullDepth,
+                    -beta,
+                    -beta + 1,
+                    ply + 1,
+                    false,
+                    false
+                );
+
+                pos.undoNullMove(nullState);
+
+                if (shouldStop())
+                    return 0;
+
+                // Never manufacture a mate score from a synthetic pass.
+                if (nullScore >= beta && nullScore < MATE_THRESHOLD)
+                    return nullScore;
+            }
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
         orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
 
-        const Color us = pos.sideToMove();
         int legalMoves = 0;
         int bestScore = -INF;
         Move bestMove{};

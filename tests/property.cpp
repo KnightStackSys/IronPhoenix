@@ -73,6 +73,22 @@ int main() {
         p.finalizeSetup();
         assert(p.key() == p.recomputeKey());
 
+        // Null move must advance exactly one 4PC turn and then restore the
+        // position byte-for-byte from the searcher's point of view.
+        const Key beforeNull = p.key();
+        const Color beforeNullSide = p.sideToMove();
+        const Bitboard beforeNullCheckers = p.checkers();
+        StateInfo nullState;
+        p.makeNullMove(nullState);
+        assert(p.sideToMove() == nextColor(beforeNullSide));
+        assert(p.key() == p.recomputeKey());
+        p.undoNullMove(nullState);
+        assert(p.sideToMove() == beforeNullSide);
+        assert(p.checkers() == beforeNullCheckers);
+        assert(p.key() == beforeNull);
+        assert(p.key() == p.recomputeKey());
+        assert(p.verify());
+
         Bitboard movers = p.occupancy(stm);
         if (!movers)
             continue;

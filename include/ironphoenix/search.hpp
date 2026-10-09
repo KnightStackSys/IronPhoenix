@@ -85,7 +85,7 @@ namespace ironphoenix {
         void run(Position position, std::ostream& out);
         void runMultiPV(Position position, int multiPV, std::ostream& out);
 
-        int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode);
+        int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull = true);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
         int moveScore(const Position& pos, Move move, Move ttMove, int ply) const noexcept;
