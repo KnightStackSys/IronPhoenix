@@ -1,23 +1,54 @@
-name: C/C++ CI
+name: 🔥 IronPhoenix CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - nnue-v1
+
   pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
 
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 🐧 Linux GCC
+            os: ubuntu-latest
+            configure_args: -DCMAKE_BUILD_TYPE=Release
+
+          - name: 🪟 Windows MSVC
+            os: windows-latest
+            configure_args: -A x64
 
     steps:
-    - uses: actions/checkout@v4
-    - name: configure
-      run: ./configure
-    - name: make
-      run: make
-    - name: make check
-      run: make check
-    - name: make distcheck
-      run: make distcheck
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configure
+        run: >
+          cmake -S . -B build
+          ${{ matrix.configure_args }}
+          -DIRONPHOENIX_BUILD_TESTS=ON
+          -DIRONPHOENIX_BUILD_BENCHMARK=ON
+
+      - name: 🔨 Build
+        run: cmake --build build --config Release --parallel
+
+      - name: 🧪 Run tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: 🧠 Validate PhoenixNet Python
+        if: ${{ hashFiles('nnue/*.py') != '' }}
+        run: python -m py_compile nnue/model.py nnue/train.py nnue/export.py
