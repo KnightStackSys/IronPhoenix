@@ -108,7 +108,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
     for (auto& row : pv_)
         row.fill(Move{});
     pvLength_.fill(0);
-    searchStack_.fill(HistoryContext{});
+    searchStack_.fill(SearchStackEntry{});
 
     MoveList rootLegal;
     generateLegalMoves(position, rootLegal);
