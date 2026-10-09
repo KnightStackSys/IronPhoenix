@@ -610,6 +610,10 @@ int main(int argc, char** argv) {
         std::cout << "append requested but dataset does not exist; creating it\n";
     }
 
+    const std::uint64_t intendedTotal = resume
+        ? requestedPositionArgument
+        : (existingPtr != nullptr ? existing.header.recordCount : 0ULL) + options.positions;
+
     DatasetWriter writer(options, existingPtr, error);
     if (!writer.good()) {
         std::cerr << error << '\n';
@@ -687,8 +691,7 @@ int main(int argc, char** argv) {
         std::cout
             << "stopped safely: added " << writer.addedCount()
             << " positions this run; total " << writer.totalCount()
-            << ". Resume with --resume --positions "
-            << (resume ? requestedPositionArgument : writer.totalCount() + options.positions)
+            << ". Resume with --resume --positions " << intendedTotal
             << " using the same output file.\n";
         return 0;
     }
