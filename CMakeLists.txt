@@ -22,6 +22,7 @@ add_library(ironphoenix_core STATIC
     src/lmr.cpp
     src/tt.cpp
     src/eval.cpp
+    src/nnue.cpp
     src/search.cpp
     src/fen.cpp
     src/movegen.cpp
@@ -29,6 +30,7 @@ add_library(ironphoenix_core STATIC
     src/uci.cpp
     include/ironphoenix/eval.hpp
     include/ironphoenix/lmr.hpp
+    include/ironphoenix/nnue.hpp
 )
 
 add_library(IronPhoenix::Core ALIAS ironphoenix_core)
