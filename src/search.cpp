@@ -416,11 +416,11 @@ namespace ironphoenix {
 
         const bool inCheckNode = pos.inCheck();
 
-        // Internal Iterative Reduction (IIR): when a sufficiently deep
-        // non-PV node has no TT move to guide ordering, search it one ply
-        // shallower. The reduction is deliberately conservative because LMR
-        // can still reduce later quiet moves independently.
-        if (!pvNode
+        // Internal Iterative Reduction (IIR): when a sufficiently deep PV
+        // node has no TT move to guide ordering, search it one ply shallower.
+        // The reduction is deliberately conservative because LMR can still
+        // reduce later quiet moves independently.
+        if (pvNode
             && ply > 0
             && depth >= IIR_MIN_DEPTH
             && !inCheckNode
