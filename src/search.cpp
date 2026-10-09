@@ -22,6 +22,8 @@ namespace ironphoenix {
         constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
         constexpr int QSEARCH_SEE_THRESHOLD = -50;
 
+        constexpr int IIR_MIN_DEPTH = 5;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
@@ -413,6 +415,18 @@ namespace ironphoenix {
         }
 
         const bool inCheckNode = pos.inCheck();
+
+        // Internal Iterative Reduction (IIR): when a sufficiently deep
+        // non-PV node has no TT move to guide ordering, search it one ply
+        // shallower. The reduction is deliberately conservative because LMR
+        // can still reduce later quiet moves independently.
+        if (!pvNode
+            && ply > 0
+            && depth >= IIR_MIN_DEPTH
+            && !inCheckNode
+            && !ttMove) {
+            --depth;
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
