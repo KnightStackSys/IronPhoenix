@@ -21,12 +21,13 @@ add_library(ironphoenix_core STATIC
     src/history.cpp
     src/lmr.cpp
     src/tt.cpp
+    src/eval.cpp
     src/search.cpp
     src/fen.cpp
     src/movegen.cpp
     src/preft.cpp
     src/uci.cpp
-
+    include/ironphoenix/eval.hpp
     include/ironphoenix/lmr.hpp
 )
 

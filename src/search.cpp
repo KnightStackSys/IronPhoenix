@@ -1,5 +1,6 @@
 #include "ironphoenix/search.hpp"
 
+#include "ironphoenix/eval.hpp"
 #include "ironphoenix/lmr.hpp"
 
 #include "ironphoenix/movegen.hpp"
@@ -14,14 +15,6 @@
 namespace ironphoenix {
     namespace {
 
-        constexpr std::array<int, PIECE_TYPE_NB> EVAL_VALUE = {
-            0, 100, 300, 400, 500, 1000, 0
-        };
-
-        constexpr std::array<int, PIECE_TYPE_NB> MOBILITY_WEIGHT = {
-            0, 0, 4, 4, 2, 1, 0
-        };
-
         constexpr int ASPIRATION_START_DEPTH = 4;
         constexpr int ASPIRATION_INITIAL_DELTA = 50;
 
@@ -32,47 +25,6 @@ namespace ironphoenix {
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
-        }
-
-        int mobilityForColor(const Position& pos, Color c) noexcept {
-            const Bitboard occ = pos.occupancy();
-            const Bitboard blockedByTeam = teamOccupancy(pos, c);
-            int score = 0;
-
-            auto scorePieces = [&](PieceType pt) {
-                Bitboard pieces = pos.pieces(c, pt);
-                while (pieces) {
-                    const Square sq = popLsb(pieces);
-                    Bitboard attacks{};
-
-                    switch (pt) {
-                    case KNIGHT:
-                        attacks = Geometry::KnightAttacks[sq];
-                        break;
-                    case BISHOP:
-                        attacks = Geometry::bishopAttacks(sq, occ);
-                        break;
-                    case ROOK:
-                        attacks = Geometry::rookAttacks(sq, occ);
-                        break;
-                    case QUEEN:
-                        attacks = Geometry::queenAttacks(sq, occ);
-                        break;
-                    default:
-                        break;
-                    }
-
-                    const int mobility = (attacks & ~blockedByTeam).popcount();
-                    score += mobility * MOBILITY_WEIGHT[static_cast<unsigned>(pt)];
-                }
-                };
-
-            scorePieces(KNIGHT);
-            scorePieces(BISHOP);
-            scorePieces(ROOK);
-            scorePieces(QUEEN);
-
-            return score;
         }
 
     }
@@ -168,26 +120,7 @@ namespace ironphoenix {
     }
 
     int SearchEngine::evaluate(const Position& pos) const noexcept {
-        int team0 = 0;
-        int team1 = 0;
-
-        for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
-            const Color c = static_cast<Color>(ci);
-            int material = 0;
-            for (unsigned pt = PAWN; pt <= QUEEN; ++pt)
-                material += pos.pieces(c, static_cast<PieceType>(pt)).popcount() * EVAL_VALUE[pt];
-
-            const int playerScore = material + mobilityForColor(pos, c);
-
-            if (teamOf(c) == 0)
-                team0 += playerScore;
-            else
-                team1 += playerScore;
-        }
-
-        const int score = team0 - team1;
-
-        return teamOf(pos.sideToMove()) == 0 ? score : -score;
+        return Eval::evaluate(pos);
     }
 
     int SearchEngine::historyBonus(int depth) const noexcept {
