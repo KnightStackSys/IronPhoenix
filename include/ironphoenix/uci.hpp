@@ -29,6 +29,7 @@ namespace ironphoenix {
         Fen4State fenState_{};
         std::string startFen_;
         SetupType setup_ = SetupType::Modern;
+        int multiPV_ = 1;
         SearchEngine search_{};
 
         bool handleLine(const std::string& line, std::ostream& out);
