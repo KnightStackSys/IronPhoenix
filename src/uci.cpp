@@ -3,6 +3,7 @@
 #include "ironphoenix/movegen.hpp"
 #include "ironphoenix/nnue.hpp"
 #include "ironphoenix/perft.hpp"
+#include "ironphoenix/tuning.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -244,6 +245,7 @@ namespace ironphoenix {
             "  setoption name EvalFile value <path-to-.nnue>\n"
             "  setoption name UseNNUE value <true|false>\n"
             "  setoption name ReloadNNUE    - reload the current EvalFile\n"
+            "  tuneparams                  - print current search/HCE tuning values\n"
             "  position fen <FEN4> [moves <m1> <m2> ...]\n"
             "  position startpos [moves ...]   (Modern is built in by default)\n"
             "  d                           - display board\n"
@@ -422,6 +424,9 @@ namespace ironphoenix {
             out << "info string Hash cleared\n";
             return true;
         }
+
+        if (Tuning::handleSetOption(args, search_, out))
+            return true;
 
         out << "info string unsupported option\n";
         return false;
@@ -615,14 +620,18 @@ namespace ironphoenix {
                 << "option name EvalFile type string default " << nnueFile_ << "\n"
                 << "option name UseNNUE type check default " << (useNNUE_ ? "true" : "false") << "\n"
                 << "option name ReloadNNUE type button\n"
-                << "option name Clear Hash type button\n"
-                << "uciok\n";
+                << "option name Clear Hash type button\n";
+            Tuning::printUciOptions(out);
+            out << "uciok\n";
         }
         else if (line == "isready") {
             out << "readyok\n";
         }
         else if (line == "help") {
             printHelp(out);
+        }
+        else if (line == "tuneparams") {
+            Tuning::printCurrent(out);
         }
         else if (line == "ucinewgame") {
             search_.newGame();
