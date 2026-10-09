@@ -35,6 +35,8 @@ namespace ironphoenix {
 
     class SearchEngine {
     public:
+        static constexpr int MAX_MULTI_PV = 32;
+
         SearchEngine();
         ~SearchEngine();
 
@@ -42,6 +44,11 @@ namespace ironphoenix {
         SearchEngine& operator=(const SearchEngine&) = delete;
 
         void start(Position position, SearchLimits limits, std::ostream& out);
+
+        // Dedicated root MultiPV search. MultiPV=1 should continue to use
+        // start(), preserving the normal PVS/aspiration search path exactly.
+        void startMultiPV(Position position, SearchLimits limits, int multiPV, std::ostream& out);
+
         void stop() noexcept;
         void stopAndWait() noexcept;
 
@@ -76,6 +83,8 @@ namespace ironphoenix {
         mutable std::mutex outputMutex_;
 
         void run(Position position, std::ostream& out);
+        void runMultiPV(Position position, int multiPV, std::ostream& out);
+
         int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
@@ -102,6 +111,16 @@ namespace ironphoenix {
             int pvLength,
             ScoreBound bound = ScoreBound::Exact
         );
+
+        void emitMultiPVInfo(
+            std::ostream& out,
+            int depth,
+            int multiPvIndex,
+            int score,
+            const Move* pv,
+            int pvLength
+        );
+
         void emitBestMove(std::ostream& out, Move move);
     };
 

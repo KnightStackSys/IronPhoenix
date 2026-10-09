@@ -1,6 +1,7 @@
 #include "ironphoenix/eval.hpp"
 
 #include "ironphoenix/geometry.hpp"
+#include "ironphoenix/nnue.hpp"
 #include "ironphoenix/position.hpp"
 
 #include <array>
@@ -66,7 +67,7 @@ namespace ironphoenix::Eval {
                     const int mobility = (attacks & ~blockedByTeam).popcount();
                     score += mobility * MOBILITY_WEIGHT[static_cast<unsigned>(pt)];
                 }
-                };
+            };
 
             scorePieces(KNIGHT);
             scorePieces(BISHOP);
@@ -76,32 +77,36 @@ namespace ironphoenix::Eval {
             return score;
         }
 
-        int playerScore(const Position& pos,
-            Color c) noexcept {
+        int playerScore(const Position& pos, Color c) noexcept {
             return materialForColor(pos, c)
                 + mobilityForColor(pos, c);
+        }
+
+        int handcraftedEvaluate(const Position& pos) noexcept {
+            int team0 = 0;
+            int team1 = 0;
+
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color c = static_cast<Color>(ci);
+                const int score = playerScore(pos, c);
+
+                if (teamOf(c) == 0)
+                    team0 += score;
+                else
+                    team1 += score;
+            }
+
+            const int score = team0 - team1;
+            return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 
     }
 
     int evaluate(const Position& pos) noexcept {
+        if (NNUE::loaded())
+            return NNUE::evaluate(pos);
 
-        int team0 = 0;
-        int team1 = 0;
-
-        for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
-            const Color c = static_cast<Color>(ci);
-            const int score = playerScore(pos, c);
-
-            if (teamOf(c) == 0)
-                team0 += score;
-            else
-                team1 += score;
-        }
-
-        const int score = team0 - team1;
-
-        return teamOf(pos.sideToMove()) == 0 ? score : -score;
+        return handcraftedEvaluate(pos);
     }
 
 }
