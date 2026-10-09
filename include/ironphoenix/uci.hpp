@@ -28,8 +28,10 @@ namespace ironphoenix {
         Position pos_{};
         Fen4State fenState_{};
         std::string startFen_;
+        std::string nnueFile_ = "ironphoenix.nnue";
         SetupType setup_ = SetupType::Modern;
         int multiPV_ = 1;
+        bool useNNUE_ = false;
         SearchEngine search_{};
 
         bool handleLine(const std::string& line, std::ostream& out);
