@@ -81,18 +81,10 @@ void writeValue(std::ofstream& out, const T& value) {
     out.write(reinterpret_cast<const char*>(&value), sizeof(T));
 }
 
-void writeFeatureVector(std::ofstream& out, const std::vector<std::uint16_t>& features) {
-    if (!features.empty()) {
-        out.write(
-            reinterpret_cast<const char*>(features.data()),
-            static_cast<std::streamsize>(features.size() * sizeof(std::uint16_t)));
-    }
-}
-
 class DatasetWriter final {
 public:
-    DatasetWriter(const Options& options)
-        : options_(options), out_(options.output, std::ios::binary | std::ios::trunc) {
+    explicit DatasetWriter(const Options& options)
+        : out_(options.output, std::ios::binary | std::ios::trunc) {
         if (!out_)
             return;
 
@@ -104,7 +96,7 @@ public:
         writeValue(out_, options.scoreScale);
         writeValue(out_, options.seed);
 
-        recordCountPos_ = out_.tellp();
+        countPosition_ = out_.tellp();
         const std::uint64_t zero = 0;
         writeValue(out_, zero);
     }
@@ -117,10 +109,26 @@ public:
         return static_cast<bool>(out_);
     }
 
-    bool write(const Record& record) {
+    [[nodiscard]] std::uint64_t count() const noexcept {
+        return reserved_.load(std::memory_order_relaxed);
+    }
+
+    bool tryWrite(const Record& record, std::uint64_t limit) {
         if (record.own.size() > MAX_FEATURES_PER_STREAM
             || record.partner.size() > MAX_FEATURES_PER_STREAM)
             return false;
+
+        std::uint64_t current = reserved_.load(std::memory_order_relaxed);
+        while (current < limit) {
+            if (reserved_.compare_exchange_weak(
+                    current,
+                    current + 1,
+                    std::memory_order_relaxed,
+                    std::memory_order_relaxed))
+                break;
+        }
+        if (current >= limit)
+            return true;
 
         std::lock_guard lock(mutex_);
         if (!out_ || finalized_)
@@ -137,8 +145,17 @@ public:
         writeValue(out_, record.ply);
         writeValue(out_, record.sideToMove);
         writeValue(out_, record.flags);
-        writeFeatureVector(out_, record.own);
-        writeFeatureVector(out_, record.partner);
+
+        if (!record.own.empty()) {
+            out_.write(
+                reinterpret_cast<const char*>(record.own.data()),
+                static_cast<std::streamsize>(record.own.size() * sizeof(std::uint16_t)));
+        }
+        if (!record.partner.empty()) {
+            out_.write(
+                reinterpret_cast<const char*>(record.partner.data()),
+                static_cast<std::streamsize>(record.partner.size() * sizeof(std::uint16_t)));
+        }
 
         return static_cast<bool>(out_);
     }
@@ -149,20 +166,18 @@ public:
             return;
 
         const auto end = out_.tellp();
-        out_.seekp(recordCountPos_);
-        const std::uint64_t count = written_.load(std::memory_order_relaxed);
-        writeValue(out_, count);
+        out_.seekp(countPosition_);
+        const std::uint64_t recordCount = count();
+        writeValue(out_, recordCount);
         out_.seekp(end);
         out_.flush();
         finalized_ = true;
     }
 
-    std::atomic<std::uint64_t> written_{0};
-
 private:
-    const Options& options_;
     std::ofstream out_;
-    std::streampos recordCountPos_{};
+    std::streampos countPosition_{};
+    std::atomic<std::uint64_t> reserved_{0};
     std::mutex mutex_;
     bool finalized_ = false;
 };
@@ -177,8 +192,10 @@ Direction kingSideDirection(Color c) noexcept {
     return EAST;
 }
 
-Square findCastlingRook(const Position& pos, Color c, Square king, Direction dir) noexcept {
-    for (Square sq = Geometry::step(king, dir); sq != SQ_NONE; sq = Geometry::step(sq, dir)) {
+Square findCastlingRook(const Position& pos, Color c, Square king, Direction direction) noexcept {
+    for (Square sq = Geometry::step(king, direction);
+         sq != SQ_NONE;
+         sq = Geometry::step(sq, direction)) {
         if (pos.pieceAt(sq) == makePiece(c, ROOK))
             return sq;
     }
@@ -193,13 +210,15 @@ void configureStandardCastling(Position& pos) noexcept {
             continue;
 
         for (unsigned laneIndex = 0; laneIndex < 2; ++laneIndex) {
-            Direction dir = kingSideDirection(c);
+            Direction direction = kingSideDirection(c);
             if (laneIndex == 1)
-                dir = Geometry::opposite(dir);
+                direction = Geometry::opposite(direction);
 
-            const Square rook = findCastlingRook(pos, c, king, dir);
-            const Square rookTo = Geometry::step(king, dir);
-            const Square kingTo = rookTo == SQ_NONE ? SQ_NONE : Geometry::step(rookTo, dir);
+            const Square rook = findCastlingRook(pos, c, king, direction);
+            const Square rookTo = Geometry::step(king, direction);
+            const Square kingTo = rookTo == SQ_NONE
+                ? SQ_NONE
+                : Geometry::step(rookTo, direction);
 
             CastleLane lane{};
             if (rook != SQ_NONE && rookTo != SQ_NONE && kingTo != SQ_NONE && kingTo != rook) {
@@ -226,16 +245,17 @@ void collectFeatures(
     const Position& pos,
     Color perspective,
     Square anchorKing,
-    std::vector<std::uint16_t>& out) {
+    std::vector<std::uint16_t>& output) {
 
-    out.clear();
-    out.reserve(MAX_FEATURES_PER_STREAM);
+    output.clear();
+    output.reserve(MAX_FEATURES_PER_STREAM);
 
     for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
         const Color pieceColor = static_cast<Color>(ci);
         for (unsigned pti = PAWN; pti <= KING; ++pti) {
             const PieceType pt = static_cast<PieceType>(pti);
             Bitboard pieces = pos.pieces(pieceColor, pt);
+
             while (pieces) {
                 const Square sq = popLsb(pieces);
                 const std::size_t feature = NNUE::featureIndex(
@@ -244,11 +264,10 @@ void collectFeatures(
                     makePiece(pieceColor, pt),
                     sq);
 
-                if (feature >= NNUE::FEATURE_COUNT
-                    || feature > std::numeric_limits<std::uint16_t>::max())
-                    continue;
-
-                out.push_back(static_cast<std::uint16_t>(feature));
+                if (feature < NNUE::FEATURE_COUNT
+                    && feature <= std::numeric_limits<std::uint16_t>::max()) {
+                    output.push_back(static_cast<std::uint16_t>(feature));
+                }
             }
         }
     }
@@ -260,39 +279,35 @@ TeacherResult searchPosition(SearchEngine& search, Position& pos, int depth) {
 
     std::ostringstream output;
     search.start(pos, limits, output);
-
     while (search.searching())
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     search.stopAndWait();
 
-    TeacherResult result;
+    enum class ScoreKind { None, Cp, Mate };
+    ScoreKind scoreKind = ScoreKind::None;
+    int cp = 0;
     std::string bestMoveText;
+
     std::istringstream lines(output.str());
     std::string line;
-
-    enum class ScoreKind { None, Cp, Mate };
-    ScoreKind lastScore = ScoreKind::None;
-    int lastCp = 0;
-
     while (std::getline(lines, line)) {
         if (line.rfind("info ", 0) == 0) {
-            const std::string cpToken = " score cp ";
-            const std::string mateToken = " score mate ";
-            const auto cpPos = line.find(cpToken);
-            const auto matePos = line.find(mateToken);
+            constexpr std::string_view CP_TOKEN = " score cp ";
+            constexpr std::string_view MATE_TOKEN = " score mate ";
+            const auto cpPos = line.find(CP_TOKEN);
+            const auto matePos = line.find(MATE_TOKEN);
 
             if (cpPos != std::string::npos) {
-                const auto begin = cpPos + cpToken.size();
                 try {
-                    lastCp = std::stoi(line.substr(begin));
-                    lastScore = ScoreKind::Cp;
+                    cp = std::stoi(line.substr(cpPos + CP_TOKEN.size()));
+                    scoreKind = ScoreKind::Cp;
                 }
                 catch (...) {
-                    lastScore = ScoreKind::None;
+                    scoreKind = ScoreKind::None;
                 }
             }
             else if (matePos != std::string::npos) {
-                lastScore = ScoreKind::Mate;
+                scoreKind = ScoreKind::Mate;
             }
         }
         else if (line.rfind("bestmove ", 0) == 0) {
@@ -300,22 +315,17 @@ TeacherResult searchPosition(SearchEngine& search, Position& pos, int depth) {
         }
     }
 
-    if (bestMoveText.empty() || bestMoveText == "0000")
+    TeacherResult result;
+    if (bestMoveText.empty() || bestMoveText == "0000" || scoreKind == ScoreKind::None)
         return result;
 
-    Move bestMove;
     std::string error;
-    if (!parseLegalMove(pos, bestMoveText, bestMove, error))
+    if (!parseLegalMove(pos, bestMoveText, result.bestMove, error))
         return result;
 
     result.ok = true;
-    result.bestMove = bestMove;
-    result.mate = lastScore == ScoreKind::Mate;
-    if (lastScore == ScoreKind::Cp)
-        result.cp = lastCp;
-    else if (lastScore == ScoreKind::None)
-        result.ok = false;
-
+    result.mate = scoreKind == ScoreKind::Mate;
+    result.cp = cp;
     return result;
 }
 
@@ -335,21 +345,8 @@ Move chooseRandomOpeningMove(Position& pos, std::mt19937_64& rng) {
     if (candidateCount == 0)
         return legal.moves[0];
 
-    std::uniform_int_distribution<std::size_t> distribution(0, candidateCount - 1);
-    return candidates[distribution(rng)];
-}
-
-bool reserveRecordSlot(std::atomic<std::uint64_t>& count, std::uint64_t limit) {
-    std::uint64_t current = count.load(std::memory_order_relaxed);
-    while (current < limit) {
-        if (count.compare_exchange_weak(
-                current,
-                current + 1,
-                std::memory_order_relaxed,
-                std::memory_order_relaxed))
-            return true;
-    }
-    return false;
+    std::uniform_int_distribution<std::size_t> pick(0, candidateCount - 1);
+    return candidates[pick(rng)];
 }
 
 void workerMain(
@@ -361,30 +358,30 @@ void workerMain(
 
     SearchEngine search;
     if (!search.setHashSizeMB(options.hashMB)) {
+        std::cerr << "worker " << workerId << ": unable to allocate hash\n";
         failed.store(true, std::memory_order_relaxed);
         return;
     }
 
-    std::mt19937_64 rng(options.seed + 0x9E3779B97F4A7C15ULL * (workerId + 1ULL));
+    std::mt19937_64 rng(
+        options.seed + 0x9E3779B97F4A7C15ULL * (static_cast<std::uint64_t>(workerId) + 1ULL));
 
     Position pos;
     Fen4State fenState;
     std::string error;
 
-    while (!failed.load(std::memory_order_relaxed)
-        && writer.written_.load(std::memory_order_relaxed) < options.positions) {
-
+    while (!failed.load(std::memory_order_relaxed) && writer.count() < options.positions) {
         const std::uint32_t gameId = nextGameId.fetch_add(1, std::memory_order_relaxed);
+
         if (!resetModern(pos, fenState, error)) {
-            std::cerr << "worker " << workerId << ": failed to reset start position: " << error << '\n';
+            std::cerr << "worker " << workerId << ": start position failed: " << error << '\n';
             failed.store(true, std::memory_order_relaxed);
             return;
         }
         search.newGame();
 
         for (int ply = 0; ply < options.maxPlies; ++ply) {
-            if (failed.load(std::memory_order_relaxed)
-                || writer.written_.load(std::memory_order_relaxed) >= options.positions)
+            if (failed.load(std::memory_order_relaxed) || writer.count() >= options.positions)
                 break;
 
             MoveList legal;
@@ -402,6 +399,7 @@ void workerMain(
                 teacher = searchPosition(search, pos, options.depth);
                 if (!teacher.ok)
                     break;
+
                 move = teacher.bestMove;
 
                 const bool samplePly = ply >= options.skipPlies
@@ -416,6 +414,7 @@ void workerMain(
                     record.gameId = gameId;
                     record.ply = static_cast<std::uint16_t>(std::min(ply, 65535));
                     record.sideToMove = static_cast<std::uint8_t>(pos.sideToMove());
+
                     if (pos.inCheck())
                         record.flags |= 1u;
                     if (pos.aliveMask() != 0xF)
@@ -427,22 +426,22 @@ void workerMain(
                     collectFeatures(pos, perspective, pos.kingSquare(partner), record.partner);
 
                     if (record.own.size() != record.partner.size()) {
+                        std::cerr << "worker " << workerId << ": feature stream size mismatch\n";
                         failed.store(true, std::memory_order_relaxed);
                         return;
                     }
 
-                    if (reserveRecordSlot(writer.written_, options.positions)) {
-                        if (!writer.write(record)) {
-                            failed.store(true, std::memory_order_relaxed);
-                            return;
-                        }
+                    if (!writer.tryWrite(record, options.positions)) {
+                        std::cerr << "worker " << workerId << ": dataset write failed\n";
+                        failed.store(true, std::memory_order_relaxed);
+                        return;
+                    }
 
-                        const auto count = writer.written_.load(std::memory_order_relaxed);
-                        if (count % 1000 == 0 || count == options.positions) {
-                            std::cout << "positions " << count << '/' << options.positions
-                                << " games " << (gameId + 1)
-                                << " worker " << workerId << '\n';
-                        }
+                    const auto count = writer.count();
+                    if (count % 1000 == 0 || count == options.positions) {
+                        std::cout << "positions " << count << '/' << options.positions
+                            << " games " << (gameId + 1)
+                            << " worker " << workerId << '\n';
                     }
                 }
             }
@@ -450,8 +449,15 @@ void workerMain(
             if (!move)
                 break;
 
-            StateInfo st;
-            pos.makeMove(move, st);
+            // Chess.com-style Teams ends immediately when an enemy king is
+            // captured. Never generate post-terminal positions for training.
+            const bool terminalKingCapture = isTerminalKingCapture(pos, move);
+
+            StateInfo state;
+            pos.makeMove(move, state);
+
+            if (terminalKingCapture)
+                break;
         }
     }
 }
@@ -459,25 +465,19 @@ void workerMain(
 bool parseUnsigned(std::string_view text, std::uint64_t& value) {
     try {
         std::size_t used = 0;
-        const auto parsed = std::stoull(std::string(text), &used);
-        if (used != text.size())
-            return false;
-        value = parsed;
-        return true;
+        value = std::stoull(std::string(text), &used);
+        return used == text.size();
     }
     catch (...) {
         return false;
     }
 }
 
-bool parseInt(std::string_view text, int& value) {
+bool parseSigned(std::string_view text, int& value) {
     try {
         std::size_t used = 0;
-        const auto parsed = std::stoi(std::string(text), &used);
-        if (used != text.size())
-            return false;
-        value = parsed;
-        return true;
+        value = std::stoi(std::string(text), &used);
+        return used == text.size();
     }
     catch (...) {
         return false;
@@ -487,28 +487,28 @@ bool parseInt(std::string_view text, int& value) {
 void printUsage() {
     std::cout
         << "IronPhoenix PhoenixNet dataset generator\n\n"
-        << "Usage:\n"
-        << "  ironphoenix_dataset [options]\n\n"
-        << "Options:\n"
-        << "  --output <file>         Output .ipd file (default phoenix_dataset.ipd)\n"
-        << "  --positions <n>         Number of samples (default 500000)\n"
-        << "  --depth <n>             Teacher search depth (default 8)\n"
-        << "  --workers <n>           Parallel self-play workers (default 1)\n"
-        << "  --hash <mb>             Hash MB per worker (default 16)\n"
-        << "  --random-plies <n>      Random opening plies per game (default 4)\n"
-        << "  --skip-plies <n>        Do not save before this ply (default 8)\n"
-        << "  --sample-every <n>      Save one of every N plies (default 3)\n"
-        << "  --max-plies <n>         Maximum plies per game (default 320)\n"
-        << "  --cp-clamp <n>          Clamp teacher CP before scaling (default 4000)\n"
-        << "  --score-scale <n>       CP per one network target unit (default 400)\n"
-        << "  --seed <n>              RNG seed\n"
-        << "  --help                  Show this help\n";
+        << "Usage: ironphoenix_dataset [options]\n\n"
+        << "  --output <file>       Output .ipd file (default phoenix_dataset.ipd)\n"
+        << "  --positions <n>       Number of samples (default 500000)\n"
+        << "  --depth <n>           Teacher search depth (default 8)\n"
+        << "  --workers <n>         Parallel self-play workers (default 1)\n"
+        << "  --hash <mb>           Hash MB per worker (default 16)\n"
+        << "  --random-plies <n>    Random opening plies (default 4)\n"
+        << "  --skip-plies <n>      Earliest saved ply (default 8)\n"
+        << "  --sample-every <n>    Save one of every N plies (default 3)\n"
+        << "  --max-plies <n>       Maximum plies per game (default 320)\n"
+        << "  --cp-clamp <n>        Teacher CP clamp (default 4000)\n"
+        << "  --score-scale <n>     CP per target unit (default 400)\n"
+        << "  --seed <n>            RNG seed\n"
+        << "  --help                Show this help\n";
 }
 
-bool parseOptions(int argc, char** argv, Options& options) {
+bool parseOptions(int argc, char** argv, Options& options, bool& showedHelp) {
+    showedHelp = false;
+
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg = argv[i];
-        auto needValue = [&]() -> std::string_view {
+        auto value = [&]() -> std::string_view {
             if (i + 1 >= argc)
                 return {};
             return argv[++i];
@@ -516,49 +516,50 @@ bool parseOptions(int argc, char** argv, Options& options) {
 
         if (arg == "--help" || arg == "-h") {
             printUsage();
+            showedHelp = true;
             return false;
         }
-        if (arg == "--output") {
-            const auto value = needValue();
-            if (value.empty()) return false;
-            options.output = value;
+        else if (arg == "--output") {
+            const auto text = value();
+            if (text.empty()) return false;
+            options.output = text;
         }
         else if (arg == "--positions") {
-            std::uint64_t value = 0;
-            if (!parseUnsigned(needValue(), value) || value == 0) return false;
-            options.positions = value;
+            std::uint64_t parsed = 0;
+            if (!parseUnsigned(value(), parsed) || parsed == 0) return false;
+            options.positions = parsed;
         }
         else if (arg == "--depth") {
-            if (!parseInt(needValue(), options.depth) || options.depth < 1 || options.depth > 32) return false;
+            if (!parseSigned(value(), options.depth) || options.depth < 1 || options.depth > 32) return false;
         }
         else if (arg == "--workers") {
-            std::uint64_t value = 0;
-            if (!parseUnsigned(needValue(), value) || value == 0 || value > 128) return false;
-            options.workers = static_cast<unsigned>(value);
+            std::uint64_t parsed = 0;
+            if (!parseUnsigned(value(), parsed) || parsed == 0 || parsed > 128) return false;
+            options.workers = static_cast<unsigned>(parsed);
         }
         else if (arg == "--hash") {
-            std::uint64_t value = 0;
-            if (!parseUnsigned(needValue(), value) || value == 0 || value > 4096) return false;
-            options.hashMB = static_cast<std::size_t>(value);
+            std::uint64_t parsed = 0;
+            if (!parseUnsigned(value(), parsed) || parsed == 0 || parsed > 4096) return false;
+            options.hashMB = static_cast<std::size_t>(parsed);
         }
         else if (arg == "--random-plies") {
-            if (!parseInt(needValue(), options.randomPlies) || options.randomPlies < 0) return false;
+            if (!parseSigned(value(), options.randomPlies) || options.randomPlies < 0) return false;
         }
         else if (arg == "--skip-plies") {
-            if (!parseInt(needValue(), options.skipPlies) || options.skipPlies < 0) return false;
+            if (!parseSigned(value(), options.skipPlies) || options.skipPlies < 0) return false;
         }
         else if (arg == "--sample-every") {
-            if (!parseInt(needValue(), options.sampleEvery) || options.sampleEvery < 1) return false;
+            if (!parseSigned(value(), options.sampleEvery) || options.sampleEvery < 1) return false;
         }
         else if (arg == "--max-plies") {
-            if (!parseInt(needValue(), options.maxPlies) || options.maxPlies < 1) return false;
+            if (!parseSigned(value(), options.maxPlies) || options.maxPlies < 1) return false;
         }
         else if (arg == "--cp-clamp") {
-            if (!parseInt(needValue(), options.cpClamp) || options.cpClamp < 1 || options.cpClamp >= 29000) return false;
+            if (!parseSigned(value(), options.cpClamp) || options.cpClamp < 1 || options.cpClamp >= 29000) return false;
         }
         else if (arg == "--score-scale") {
             try {
-                options.scoreScale = std::stof(std::string(needValue()));
+                options.scoreScale = std::stof(std::string(value()));
             }
             catch (...) {
                 return false;
@@ -566,7 +567,7 @@ bool parseOptions(int argc, char** argv, Options& options) {
             if (!(options.scoreScale > 0.0f)) return false;
         }
         else if (arg == "--seed") {
-            if (!parseUnsigned(needValue(), options.seed)) return false;
+            if (!parseUnsigned(value(), options.seed)) return false;
         }
         else {
             std::cerr << "unknown option: " << arg << '\n';
@@ -586,10 +587,11 @@ int main(int argc, char** argv) {
     using namespace ironphoenix;
 
     Options options;
-    if (!parseOptions(argc, argv, options)) {
-        if (argc <= 1)
+    bool showedHelp = false;
+    if (!parseOptions(argc, argv, options, showedHelp)) {
+        if (!showedHelp)
             printUsage();
-        return argc > 1 ? 1 : 0;
+        return showedHelp ? 0 : 1;
     }
 
     DatasetWriter writer(options);
@@ -598,7 +600,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "PhoenixNet dataset generation\n"
+    std::cout
+        << "PhoenixNet dataset generation\n"
         << "output       " << options.output << '\n'
         << "positions    " << options.positions << '\n'
         << "depth        " << options.depth << '\n'
@@ -614,9 +617,10 @@ int main(int argc, char** argv) {
     std::vector<std::thread> workers;
     workers.reserve(options.workers);
 
-    for (unsigned worker = 0; worker < options.workers; ++worker) {
-        workers.emplace_back(workerMain,
-            worker,
+    for (unsigned workerId = 0; workerId < options.workers; ++workerId) {
+        workers.emplace_back(
+            workerMain,
+            workerId,
             std::cref(options),
             std::ref(writer),
             std::ref(nextGameId),
@@ -633,7 +637,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    std::cout << "done: wrote " << writer.written_.load(std::memory_order_relaxed)
+    std::cout << "done: wrote " << writer.count()
         << " positions to " << options.output << '\n';
     return 0;
 }
