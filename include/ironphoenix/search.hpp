@@ -15,6 +15,12 @@
 
 namespace ironphoenix {
 
+    enum class ScoreBound {
+        Exact,
+        Lower,
+        Upper
+    };
+
     struct SearchLimits {
         int depth = 0;
         std::uint64_t nodes = 0;
@@ -88,7 +94,14 @@ namespace ironphoenix {
         [[nodiscard]] std::int64_t elapsedMs() const noexcept;
         [[nodiscard]] std::int64_t calculateTimeBudget(const Position& pos, const SearchLimits& limits) const noexcept;
 
-        void emitInfo(std::ostream& out, int depth, int score, const Move* pv, int pvLength);
+        void emitInfo(
+            std::ostream& out,
+            int depth,
+            int score,
+            const Move* pv,
+            int pvLength,
+            ScoreBound bound = ScoreBound::Exact
+        );
         void emitBestMove(std::ostream& out, Move move);
     };
 

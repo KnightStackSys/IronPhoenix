@@ -253,7 +253,7 @@ namespace ironphoenix {
             return false;
         }
 
-        Position temp = pos; // preserves setup-specific castle lane configuration
+        Position temp = pos;
         const std::uint8_t ruleset = pos.rulesetId();
         temp.clear();
         temp.setRulesetId(ruleset);

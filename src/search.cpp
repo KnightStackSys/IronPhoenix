@@ -22,6 +22,9 @@ namespace ironphoenix {
             0, 0, 4, 4, 2, 1, 0
         };
 
+        constexpr int ASPIRATION_START_DEPTH = 4;
+        constexpr int ASPIRATION_INITIAL_DELTA = 50;
+
         constexpr int SEE_PRUNE_MAX_DEPTH = 4;
         constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
         constexpr int QSEARCH_SEE_THRESHOLD = -50;
@@ -376,6 +379,7 @@ namespace ironphoenix {
 
             const bool terminalKingCapture = isTerminalKingCapture(pos, move);
             const bool givesCheckMove = !terminalKingCapture && pos.givesCheck(move);
+
             int score = -INF;
             bool legal = true;
 
@@ -634,23 +638,43 @@ namespace ironphoenix {
         return bestScore;
     }
 
-    void SearchEngine::emitInfo(std::ostream& out, int depth, int score, const Move* pv, int pvLength) {
+    void SearchEngine::emitInfo(
+        std::ostream& out,
+        int depth,
+        int score,
+        const Move* pv,
+        int pvLength,
+        ScoreBound bound)
+    {
         const std::int64_t ms = elapsedMs();
-        const std::uint64_t nps = ms > 0 ? nodes_ * 1000ull / static_cast<std::uint64_t>(ms) : nodes_ * 1000ull;
+
+        const std::uint64_t nps =
+            ms > 0
+            ? nodes_ * 1000ull / static_cast<std::uint64_t>(ms)
+            : nodes_ * 1000ull;
 
         std::ostringstream line;
+
         line << "info depth " << depth
             << " seldepth " << selDepth_;
 
         if (score >= MATE_THRESHOLD) {
-            line << " score mate " << (MATE_SCORE - score);
+            line << " score mate "
+                << (MATE_SCORE - score);
         }
         else if (score <= -MATE_THRESHOLD) {
-            line << " score mate -" << (MATE_SCORE + score);
+            line << " score mate -"
+                << (MATE_SCORE + score);
         }
         else {
-            line << " score cp " << score;
+            line << " score cp "
+                << score;
         }
+
+        if (bound == ScoreBound::Lower)
+            line << " lowerbound";
+        else if (bound == ScoreBound::Upper)
+            line << " upperbound";
 
         line << " nodes " << nodes_
             << " nps " << nps
@@ -661,10 +685,12 @@ namespace ironphoenix {
         for (int i = 0; i < pvLength; ++i) {
             if (!pv[i])
                 break;
+
             line << ' ' << moveToString(pv[i]);
         }
 
         std::lock_guard lock(outputMutex_);
+
         out << line.str() << '\n';
         out.flush();
     }
@@ -707,8 +733,117 @@ namespace ironphoenix {
                 break;
 
             selDepth_ = 0;
-            pvLength_[0] = 0;
-            const int score = negamax(position, depth, -INF, INF, 0, true);
+
+            int score = 0;
+
+            if (depth < ASPIRATION_START_DEPTH ||
+                bestScore >= MATE_THRESHOLD ||
+                bestScore <= -MATE_THRESHOLD)
+            {
+                pvLength_[0] = 0;
+
+                score = negamax(
+                    position,
+                    depth,
+                    -INF,
+                    INF,
+                    0,
+                    true
+                );
+            }
+            else
+            {
+                int delta = ASPIRATION_INITIAL_DELTA;
+
+                int alpha = std::max(-INF, bestScore - delta);
+                int beta = std::min(INF, bestScore + delta);
+
+                while (!shouldStop())
+                {
+                    pvLength_[0] = 0;
+
+                    score = negamax(
+                        position,
+                        depth,
+                        alpha,
+                        beta,
+                        0,
+                        true
+                    );
+
+                    if (shouldStop())
+                        break;
+
+                    if (score <= alpha)
+                    {
+                        emitInfo(
+                            out,
+                            depth,
+                            score,
+                            pv_[0].data(),
+                            pvLength_[0],
+                            ScoreBound::Upper
+                        );
+
+                        delta *= 2;
+
+                        alpha = std::max(
+                            -INF,
+                            score - delta
+                        );
+
+                        beta = std::min(
+                            INF,
+                            score + delta / 2
+                        );
+                    }
+
+                    else if (score >= beta)
+                    {
+                        emitInfo(
+                            out,
+                            depth,
+                            score,
+                            pv_[0].data(),
+                            pvLength_[0],
+                            ScoreBound::Lower
+                        );
+
+                        delta *= 2;
+
+                        beta = std::min(
+                            INF,
+                            score + delta
+                        );
+
+                        alpha = std::max(
+                            -INF,
+                            score - delta / 2
+                        );
+                    }
+
+                    else
+                    {
+                        break;
+                    }
+
+                    if (alpha <= -INF && beta >= INF)
+                    {
+                        pvLength_[0] = 0;
+
+                        score = negamax(
+                            position,
+                            depth,
+                            -INF,
+                            INF,
+                            0,
+                            true
+                        );
+
+                        break;
+                    }
+                }
+            }
 
             if (shouldStop())
                 break;
@@ -716,7 +851,14 @@ namespace ironphoenix {
             if (pvLength_[0] > 0 && pv_[0][0]) {
                 bestMove = pv_[0][0];
                 bestScore = score;
-                emitInfo(out, depth, bestScore, pv_[0].data(), pvLength_[0]);
+
+                emitInfo(
+                    out,
+                    depth,
+                    bestScore,
+                    pv_[0].data(),
+                    pvLength_[0]
+                );
             }
 
             if (requestedDepth > 0 && depth == requestedDepth)
