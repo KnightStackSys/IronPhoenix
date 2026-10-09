@@ -22,9 +22,26 @@ namespace ironphoenix {
         constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
         constexpr int QSEARCH_SEE_THRESHOLD = -50;
 
+        // 4PC NMP is deliberately more conservative than a normal 2-player
+        // baseline. A shallow false fail-high is expensive because one search
+        // ply is only one seat's turn, not a complete four-seat rotation.
+        constexpr int NULL_MOVE_MIN_DEPTH = 5;
+        constexpr int NULL_MOVE_EVAL_MARGIN = 100;
+        constexpr int NULL_MOVE_BASE_REDUCTION = 2;
+        constexpr int NULL_MOVE_DEPTH_DIVISOR = 6;
+        constexpr int NULL_MOVE_MIN_NON_PAWN_PIECES = 2;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool hasEnoughNonPawnMaterial(const Position& pos, Color c) noexcept {
+            const Bitboard pieces = pos.pieces(c, KNIGHT)
+                | pos.pieces(c, BISHOP)
+                | pos.pieces(c, ROOK)
+                | pos.pieces(c, QUEEN);
+            return pieces.popcount() >= NULL_MOVE_MIN_NON_PAWN_PIECES;
         }
 
     }
@@ -385,7 +402,7 @@ namespace ironphoenix {
         return bestScore;
     }
 
-    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode) {
+    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
@@ -413,12 +430,58 @@ namespace ironphoenix {
         }
 
         const bool inCheckNode = pos.inCheck();
+        const Color us = pos.sideToMove();
+        const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
+
+        // Null Move Pruning (NMP): only prune when the static evaluation is
+        // already comfortably above beta. Requiring two non-pawn pieces and a
+        // slower depth-scaled reduction makes the heuristic less eager in 4PC
+        // endgames and at shallow depths, where a false null cutoff is costly.
+        if (allowNull
+            && !pvNode
+            && ply > 0
+            && depth >= NULL_MOVE_MIN_DEPTH
+            && !inCheckNode
+            && !mateWindow
+            && hasEnoughNonPawnMaterial(pos, us)) {
+
+            const int staticEval = evaluate(pos);
+            if (staticEval >= beta + NULL_MOVE_EVAL_MARGIN) {
+                StateInfo nullState;
+                pos.makeNullMove(nullState);
+                searchStack_[ply + 1] = HistoryContext{};
+
+                const int reduction = NULL_MOVE_BASE_REDUCTION
+                    + depth / NULL_MOVE_DEPTH_DIVISOR;
+                const int nullDepth = std::max(0, depth - 1 - reduction);
+
+                const int nullScore = -negamax(
+                    pos,
+                    nullDepth,
+                    -beta,
+                    -beta + 1,
+                    ply + 1,
+                    false,
+                    false
+                );
+
+                pos.undoNullMove(nullState);
+
+                if (shouldStop())
+                    return 0;
+
+                // The null search proves only a fail-high bound. Return beta
+                // instead of the synthetic null score so an optimistic pass
+                // cannot inflate aspiration windows or parent-node scores.
+                if (nullScore >= beta && nullScore < MATE_THRESHOLD)
+                    return beta;
+            }
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
         orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
 
-        const Color us = pos.sideToMove();
         int legalMoves = 0;
         int bestScore = -INF;
         Move bestMove{};
