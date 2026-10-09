@@ -65,7 +65,18 @@ The CMake build produces `ironphoenix_dataset` when `IRONPHOENIX_BUILD_DATASET_G
 
 The generator uses HCE-backed search as the teacher, writes exact C++ `NNUE::featureIndex()` sparse features, supports deduplication, controlled exploration, append/resume, and graceful Ctrl+C stopping.
 
-A typical dataset command is:
+A quick smoke dataset:
+
+```powershell
+.\build\Release\ironphoenix_dataset.exe `
+    --positions 10000 `
+    --depth 6 `
+    --workers 4 `
+    --hash 16 `
+    --output nnue\phoenix-smoke.ipd
+```
+
+A larger first training set:
 
 ```powershell
 .\build\Release\ironphoenix_dataset.exe `
@@ -82,6 +93,8 @@ A typical dataset command is:
     --exploration-max-loss 250 `
     --output nnue\phoenix-v1.ipd
 ```
+
+On a 16-core / 24-thread CPU, start around 8-12 generator workers. Each worker owns its own search engine and transposition table. `--hash` is per worker, so 12 workers with `--hash 16` use roughly 192 MB just for transposition tables.
 
 ## Faster exploration scheduling
 
@@ -121,6 +134,8 @@ Resume toward a total target:
     --depth 8 `
     --workers 8 `
     --hash 16 `
+    --exploration 0.15 `
+    --exploration-multipv 4 `
     --output nnue\phoenix-v1.ipd
 ```
 
@@ -156,7 +171,26 @@ Older abruptly interrupted files with stale header counts are scanned for comple
 --seed N                   deterministic RNG seed
 ```
 
+## Native IPD dataset format
+
+`ironphoenix_dataset` writes a compact little-endian `IPDATA1` stream. Each record contains:
+
+- own-king sparse feature indices
+- partner-king sparse feature indices
+- scaled training target
+- original teacher centipawn score
+- game ID
+- ply
+- side to move
+- flags for check, eliminated-player state, and whether the continuation move was exploratory
+
+Feature indices are stored as `uint16` because PhoenixNet v1 has 65,280 features.
+
+`train.py` reads `.ipd` directly and uses game IDs to keep entire self-play games on one side of the train/validation split.
+
 # Training
+
+Install Python dependencies:
 
 ```powershell
 py -m venv nnue\.venv
@@ -165,7 +199,16 @@ python -m pip install --upgrade pip
 pip install torch numpy
 ```
 
-Train:
+Train a smoke network:
+
+```powershell
+python nnue\train.py nnue\phoenix-smoke.ipd `
+    --epochs 5 `
+    --batch-size 1024 `
+    -o nnue\phoenix-smoke.pt
+```
+
+Train the larger network:
 
 ```powershell
 python nnue\train.py nnue\phoenix-v1.ipd `
@@ -179,6 +222,8 @@ If CUDA is available, `train.py` selects it automatically. Use `--device cpu` or
 
 # Exporting the network
 
+Export the best checkpoint to the format consumed by the engine:
+
 ```powershell
 python nnue\export.py nnue\phoenixnet-v1.pt `
     -o ironphoenix.nnue `
@@ -187,15 +232,17 @@ python nnue\export.py nnue\phoenixnet-v1.pt `
 
 Place `ironphoenix.nnue` beside `ironphoenix.exe`, or set `IRONPHOENIX_NNUE` to its full path.
 
-A successful load prints:
+At startup a successful load prints:
 
 ```text
 PhoenixNet loaded: ironphoenix.nnue
 ```
 
+If the file is missing or incompatible, IronPhoenix prints the HCE fallback message and continues using material + mobility.
+
 ## NNUE binary file format
 
-All values are little-endian. PhoenixNet v1 currently stores float32 weights.
+All values are little-endian. PhoenixNet v1 currently stores float32 weights to keep training/export validation straightforward.
 
 ```text
 char[8]  magic = "IPNNUE1\0"
@@ -218,4 +265,16 @@ f32              output_bias
 
 ## Development stages
 
-PhoenixNet v1 intentionally starts with full accumulator refreshes. Next optimization stages are incremental accumulators, quantization, SIMD, and SPRT validation against the reference implementation.
+PhoenixNet v1 intentionally starts with full accumulator refreshes. This gives a correctness baseline before optimization.
+
+Next stages:
+
+1. add make/undo incremental accumulator updates
+2. maintain four seat perspectives and own/partner king streams
+3. refresh only streams whose king bucket changes
+4. quantize feature-transformer weights to int16
+5. quantize dense weights to int8 with int32 accumulation
+6. add AVX2 inference
+7. SPRT optimized implementations against the reference implementation
+
+Do not remove the refresh implementation until incremental make/undo tests prove eval equivalence across captures, promotions, en-passant, castling, and king bucket changes.
