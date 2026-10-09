@@ -21,10 +21,10 @@ constexpr std::size_t DENSE_INPUT = FT_SIZE * 2;
 constexpr std::size_t HIDDEN1_SIZE = 32;
 constexpr std::size_t HIDDEN2_SIZE = 32;
 
+// Reserved for the upcoming quantized/incremental implementation.
 constexpr int ACTIVATION_MAX = 127;
 constexpr int HIDDEN_SHIFT = 6;
 constexpr int OUTPUT_DIVISOR = 64;
-constexpr int MAX_STATIC_EVAL = 28000;
 
 // PhoenixNet evaluates from the current side-to-move player's perspective.
 // Positive values mean an advantage for side-to-move's team.
