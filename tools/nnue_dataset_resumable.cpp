@@ -2,8 +2,7 @@
 //
 // Reuse the established generator implementation while replacing only the
 // orchestration/search loop pieces needed for Ctrl+C, --resume, recovery, and
-// denser progress reporting. The legacy entry point is compiled into this
-// translation unit under a different name but is never invoked.
+// denser progress reporting.
 
 #define main ironphoenix_dataset_legacy_main
 #define workerMain legacyWorkerMain
@@ -17,6 +16,8 @@
 
 namespace ironphoenix {
 namespace {
+
+constexpr int EXPLORATION_MAX_PLY = 96;
 
 volatile std::sig_atomic_t gStopRequested = 0;
 std::atomic<std::uint64_t> gLastReported{0};
@@ -68,9 +69,6 @@ void reportProgress(
     }
 }
 
-// Recover complete records written after the authoritative header count. This
-// makes datasets from an older abruptly-stopped generator salvageable. Only an
-// incomplete final record is discarded.
 bool recoverTrailingRecords(
     const std::filesystem::path& path,
     DatasetScan& scan,
@@ -217,7 +215,8 @@ TeacherResult searchPosition(
     SearchEngine& search,
     Position& pos,
     const Options& options,
-    std::mt19937_64& rng) {
+    std::mt19937_64& rng,
+    int ply) {
 
     TeacherResult result;
     if (stopRequested())
@@ -226,7 +225,13 @@ TeacherResult searchPosition(
     SearchLimits limits;
     limits.depth = options.depth;
 
-    const int requestedMultiPV = options.exploration > 0.0
+    bool explorationSearch = false;
+    if (options.exploration > 0.0 && ply <= EXPLORATION_MAX_PLY) {
+        std::uniform_real_distribution<double> probability(0.0, 1.0);
+        explorationSearch = probability(rng) < options.exploration;
+    }
+
+    const int requestedMultiPV = explorationSearch
         ? std::clamp(options.explorationMultiPV, 2, SearchEngine::MAX_MULTI_PV)
         : 1;
 
@@ -290,11 +295,7 @@ TeacherResult searchPosition(
     result.move = best.move;
     result.candidates = finalLines;
 
-    if (best.mate || options.exploration <= 0.0 || finalLines.size() < 2)
-        return result;
-
-    std::uniform_real_distribution<double> probability(0.0, 1.0);
-    if (probability(rng) >= options.exploration)
+    if (best.mate || !explorationSearch || finalLines.size() < 2)
         return result;
 
     std::vector<const RootCandidate*> alternatives;
@@ -379,7 +380,7 @@ void workerMain(
                 move = chooseRandomOpeningMove(pos, rng);
             }
             else {
-                teacher = searchPosition(search, pos, options, rng);
+                teacher = searchPosition(search, pos, options, rng, ply);
                 if (stopRequested())
                     break;
                 if (!teacher.ok)
@@ -416,16 +417,8 @@ void workerMain(
                     const Color partner = static_cast<Color>(
                         static_cast<unsigned>(perspective) ^ 2u);
 
-                    collectFeatures(
-                        pos,
-                        perspective,
-                        pos.kingSquare(perspective),
-                        record.own);
-                    collectFeatures(
-                        pos,
-                        perspective,
-                        pos.kingSquare(partner),
-                        record.partner);
+                    collectFeatures(pos, perspective, pos.kingSquare(perspective), record.own);
+                    collectFeatures(pos, perspective, pos.kingSquare(partner), record.partner);
 
                     if (record.own.size() != record.partner.size()) {
                         std::cerr << "worker " << workerId
@@ -643,6 +636,7 @@ int main(int argc, char** argv) {
         << "sample every    " << options.sampleEvery << '\n'
         << "exploration     " << options.exploration << '\n'
         << "explore MultiPV " << options.explorationMultiPV << '\n'
+        << "explore max ply " << EXPLORATION_MAX_PLY << '\n'
         << "explore maxloss " << options.explorationMaxLoss << " cp\n"
         << "dedup           " << (options.dedup ? "on" : "off") << '\n'
         << "progress every  10 positions\n"
@@ -670,7 +664,6 @@ int main(int argc, char** argv) {
     for (auto& worker : workers)
         worker.join();
 
-    // Restore the normal Ctrl+C behavior after workers are stopped.
     std::signal(SIGINT, SIG_DFL);
 #ifdef SIGTERM
     std::signal(SIGTERM, SIG_DFL);
