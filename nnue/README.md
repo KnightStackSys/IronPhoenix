@@ -40,7 +40,133 @@ IRONPHOENIX_NNUE=/path/to/network.nnue
 
 If no valid network is found, the engine automatically falls back to the existing handcrafted material + mobility evaluator.
 
-## Binary file format
+# Creating the first dataset
+
+The CMake build now produces a second executable when `IRONPHOENIX_BUILD_DATASET_GENERATOR=ON`:
+
+```text
+ironphoenix_dataset
+```
+
+It generates self-play positions using the current HCE-backed search as the teacher and writes the exact sparse feature indices produced by IronPhoenix's C++ `NNUE::featureIndex()` implementation.
+
+The generator does not load `ironphoenix.nnue`, so the first dataset is taught by the existing HCE + search rather than by an untrained neural network.
+
+A quick smoke dataset:
+
+```powershell
+.\build\Release\ironphoenix_dataset.exe `
+    --positions 10000 `
+    --depth 6 `
+    --workers 4 `
+    --hash 16 `
+    --output nnue\phoenix-smoke.ipd
+```
+
+A better first training set:
+
+```powershell
+.\build\Release\ironphoenix_dataset.exe `
+    --positions 500000 `
+    --depth 8 `
+    --workers 8 `
+    --hash 16 `
+    --random-plies 4 `
+    --skip-plies 8 `
+    --sample-every 3 `
+    --output nnue\phoenix-v1.ipd
+```
+
+On a 16-core / 24-thread CPU, start around 8-12 generator workers. Each worker owns its own search engine and transposition table. `--hash` is per worker, so 12 workers with `--hash 16` use roughly 192 MB just for transposition tables.
+
+Useful generator options:
+
+```text
+--positions N       target number of saved training samples
+--depth N           teacher search depth
+--workers N         independent parallel self-play workers
+--hash MB           transposition-table size per worker
+--random-plies N    random legal opening plies for diversity
+--skip-plies N      earliest ply that may be saved
+--sample-every N    save one of every N searched positions
+--max-plies N       maximum length of one self-play game
+--cp-clamp N        clamp search CP before conversion to target
+--score-scale N     CP represented by one network output unit
+--seed N            deterministic opening RNG seed
+```
+
+Mate scores are not written as ordinary training targets. Non-mate search scores are side-to-move-team relative, clipped to `--cp-clamp`, and divided by `--score-scale` before storage.
+
+## Native IPD dataset format
+
+`ironphoenix_dataset` writes a compact little-endian `IPDATA1` stream. Each record contains:
+
+- own-king sparse feature indices
+- partner-king sparse feature indices
+- scaled training target
+- original teacher centipawn score
+- game ID
+- ply
+- side to move
+- flags for check/eliminated-player state
+
+Feature indices are stored as `uint16` because PhoenixNet v1 has 65,280 features.
+
+`train.py` reads `.ipd` directly and uses the game IDs to keep entire self-play games on one side of the train/validation split.
+
+# Training
+
+Install Python dependencies:
+
+```powershell
+py -m venv nnue\.venv
+.\nnue\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install torch numpy
+```
+
+Train a smoke network:
+
+```powershell
+python nnue\train.py nnue\phoenix-smoke.ipd `
+    --epochs 5 `
+    --batch-size 1024 `
+    -o nnue\phoenix-smoke.pt
+```
+
+Train the first larger network:
+
+```powershell
+python nnue\train.py nnue\phoenix-v1.ipd `
+    --epochs 20 `
+    --batch-size 1024 `
+    --lr 0.001 `
+    -o nnue\phoenixnet-v1.pt
+```
+
+If CUDA is available, `train.py` selects it automatically. Use `--device cpu` or `--device cuda` to override the choice.
+
+# Exporting the network
+
+Export the best checkpoint to the format consumed by the engine:
+
+```powershell
+python nnue\export.py nnue\phoenixnet-v1.pt `
+    -o ironphoenix.nnue `
+    --output-scale 400
+```
+
+Place `ironphoenix.nnue` beside `ironphoenix.exe`, or set `IRONPHOENIX_NNUE` to its full path.
+
+At startup a successful load prints:
+
+```text
+PhoenixNet loaded: ironphoenix.nnue
+```
+
+If the file is missing or incompatible, IronPhoenix prints the HCE fallback message and continues using material + mobility.
+
+## NNUE binary file format
 
 All values are little-endian. PhoenixNet v1 currently stores float32 weights to make training/export validation straightforward before the later quantized/incremental optimization pass.
 
