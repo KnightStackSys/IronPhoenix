@@ -18,9 +18,23 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
+        // Strelka-style razoring margins. At depth 1 the static evaluation gets
+        // 125 cp of slack; depths 2-3 use a total 300 cp margin before qsearch.
+        constexpr int RAZOR_DEPTH1_MARGIN = 125;
+        constexpr int RAZOR_DEPTH3_MARGIN = 300;
+        constexpr int RAZOR_MAX_DEPTH = 3;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool anyPlayerInCheck(const Position& pos) noexcept {
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                if (pos.inCheck(static_cast<Color>(ci)))
+                    return true;
+            }
+            return false;
         }
 
     }
@@ -412,6 +426,36 @@ namespace ironphoenix {
 
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
+
+        // Strelka-style razoring: at shallow expected fail-low nodes, use qsearch
+        // to decide whether the full search is worth doing. In 4PC this is guarded
+        // more strictly than Strelka: razoring is disabled if ANY player is in
+        // check, not merely the side to move. Keep it away from PV/root nodes and
+        // mate windows as well.
+        if (!pvNode
+            && ply > 0
+            && depth <= RAZOR_MAX_DEPTH
+            && !anyPlayerInCheck(pos)
+            && alpha > -MATE_THRESHOLD
+            && beta < MATE_THRESHOLD) {
+
+            const int staticEval = evaluate(pos);
+            int razorValue = staticEval + RAZOR_DEPTH1_MARGIN;
+
+            if (razorValue < beta) {
+                if (depth == 1) {
+                    const int qscore = qsearch(pos, alpha, beta, ply, false);
+                    return std::max(qscore, razorValue);
+                }
+
+                razorValue = staticEval + RAZOR_DEPTH3_MARGIN;
+                if (razorValue < beta) {
+                    const int qscore = qsearch(pos, alpha, beta, ply, false);
+                    if (qscore < beta)
+                        return std::max(qscore, razorValue);
+                }
+            }
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
