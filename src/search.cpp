@@ -2,6 +2,7 @@
 
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/lmr.hpp"
+#include "ironphoenix/tuning.hpp"
 
 #include "ironphoenix/movegen.hpp"
 #include "ironphoenix/see.hpp"
@@ -15,12 +16,7 @@
 namespace ironphoenix {
     namespace {
 
-        constexpr int ASPIRATION_START_DEPTH = 4;
-        constexpr int ASPIRATION_INITIAL_DELTA = 50;
-
-        constexpr int SEE_PRUNE_MAX_DEPTH = 4;
-        constexpr int SEE_PRUNE_MARGIN_PER_DEPTH = 80;
-        constexpr int QSEARCH_SEE_THRESHOLD = -50;
+        constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
         constexpr int IIR_MIN_DEPTH = 5;
 
@@ -126,7 +122,8 @@ namespace ironphoenix {
     }
 
     int SearchEngine::historyBonus(int depth) const noexcept {
-        return std::min(2048, 64 * depth * depth);
+        const auto& params = Tuning::search();
+        return std::min(params.historyBonusMax, params.historyBonusScale * depth * depth);
     }
 
     int SearchEngine::moveScore(const Position& pos, Move move, Move ttMove, int ply) const noexcept {
@@ -135,6 +132,7 @@ namespace ironphoenix {
         if (isTerminalKingCapture(pos, move))
             return 45'000'000;
 
+        const auto& tuning = Tuning::search();
         const Color mover = pos.sideToMove();
         const Piece movingPiece = pos.pieceAt(move.from());
 
@@ -160,7 +158,7 @@ namespace ironphoenix {
             score += history_.continuationScore(ContinuationKind::PreviousPly, searchStack_[ply], movingPiece, move.to());
 
             if (history_.counterMove(mover, searchStack_[ply]) == move)
-                score += 32'000;
+                score += tuning.counterMoveBonus;
         }
 
         if (ply >= 4 && searchStack_[ply - 3].valid()
@@ -169,7 +167,7 @@ namespace ironphoenix {
         }
 
         if (pos.givesCheck(move))
-            score += 10'000'000;
+            score += tuning.checkMoveBonus;
 
         return score;
     }
@@ -415,6 +413,7 @@ namespace ironphoenix {
         }
 
         const bool inCheckNode = pos.inCheck();
+        const auto& tuning = Tuning::search();
 
         // Internal Iterative Reduction (IIR): when a sufficiently deep PV
         // node has no TT move to guide ordering, search it one ply shallower.
@@ -458,16 +457,31 @@ namespace ironphoenix {
             const int mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
+            // Late Move Pruning (LMP): at non-PV nodes, stop spending search
+            // effort on late quiet moves unless history says the move is
+            // promising. Checks, TT moves, promotions/captures, and mate-window
+            // searches are never pruned here. This intentionally has no depth cap.
             if (!pvNode
                 && !inCheckNode
-                && depth <= SEE_PRUNE_MAX_DEPTH
+                && legalMoves >= 3 + depth * depth
+                && quiet
+                && move != ttMove
+                && !givesCheckMove
+                && !mateWindow
+                && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
+                continue;
+            }
+
+            if (!pvNode
+                && !inCheckNode
+                && depth <= tuning.seePruneMaxDepth
                 && legalMoves > 0
                 && move.isCapture()
                 && !move.isPromotion()
                 && move != ttMove
                 && !givesCheckMove
                 && !mateWindow) {
-                const int seeThreshold = -SEE_PRUNE_MARGIN_PER_DEPTH * depth;
+                const int seeThreshold = -tuning.seePruneMarginPerDepth * depth;
                 if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
                     continue;
             }
@@ -668,6 +682,7 @@ namespace ironphoenix {
             return;
         }
 
+        const auto& tuning = Tuning::search();
         const int requestedDepth = limits_.depth > 0 ? std::min(limits_.depth, MAX_PLY - 1) : 0;
         int depth = 1;
 
@@ -683,7 +698,7 @@ namespace ironphoenix {
 
             int score = 0;
 
-            if (depth < ASPIRATION_START_DEPTH ||
+            if (depth < tuning.aspirationStartDepth ||
                 bestScore >= MATE_THRESHOLD ||
                 bestScore <= -MATE_THRESHOLD)
             {
@@ -700,7 +715,7 @@ namespace ironphoenix {
             }
             else
             {
-                int delta = ASPIRATION_INITIAL_DELTA;
+                int delta = tuning.aspirationInitialDelta;
 
                 int alpha = std::max(-INF, bestScore - delta);
                 int beta = std::min(INF, bestScore + delta);

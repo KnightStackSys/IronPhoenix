@@ -24,6 +24,7 @@ add_library(ironphoenix_core STATIC
     src/tt.cpp
     src/eval.cpp
     src/nnue.cpp
+    src/tuning.cpp
     src/search.cpp
     src/multipv.cpp
     src/fen.cpp
@@ -33,6 +34,7 @@ add_library(ironphoenix_core STATIC
     include/ironphoenix/eval.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
+    include/ironphoenix/tuning.hpp
 )
 
 add_library(IronPhoenix::Core ALIAS ironphoenix_core)

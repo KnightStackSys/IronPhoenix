@@ -1,7 +1,9 @@
 #include "ironphoenix/uci.hpp"
 
 #include "ironphoenix/movegen.hpp"
+#include "ironphoenix/nnue.hpp"
 #include "ironphoenix/perft.hpp"
+#include "ironphoenix/tuning.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -217,6 +219,11 @@ namespace ironphoenix {
 
     UciShell::UciShell()
         : startFen_(MODERN_START_FEN), setup_(SetupType::Modern) {
+        if (NNUE::loaded()) {
+            nnueFile_ = NNUE::loadedPath();
+            useNNUE_ = true;
+        }
+
         pos_.setRulesetId(setupRulesetId(setup_));
 
         std::string error;
@@ -235,6 +242,10 @@ namespace ironphoenix {
             "  setoption name Setup value <Modern|Classic|BY|BYG|RG|Custom>\n"
             "  setoption name StartFEN value <FEN4>\n"
             "  setoption name MultiPV value <1..32>\n"
+            "  setoption name EvalFile value <path-to-.nnue>\n"
+            "  setoption name UseNNUE value <true|false>\n"
+            "  setoption name ReloadNNUE    - reload the current EvalFile\n"
+            "  tuneparams                  - print current search/HCE tuning values\n"
             "  position fen <FEN4> [moves <m1> <m2> ...]\n"
             "  position startpos [moves ...]   (Modern is built in by default)\n"
             "  d                           - display board\n"
@@ -347,11 +358,75 @@ namespace ironphoenix {
             return true;
         }
 
+        constexpr std::string_view evalFilePrefix = "name EvalFile value ";
+        if (startsWith(args, evalFilePrefix)) {
+            const std::string candidate(trim(args.substr(evalFilePrefix.size())));
+            if (candidate.empty()) {
+                out << "info string EvalFile requires a PhoenixNet .nnue path\n";
+                return false;
+            }
+
+            if (!NNUE::loadNetwork(candidate)) {
+                out << "info string failed to load PhoenixNet: " << candidate << '\n';
+                return false;
+            }
+
+            nnueFile_ = candidate;
+            useNNUE_ = true;
+            search_.clearHash();
+            out << "info string PhoenixNet loaded: " << NNUE::loadedPath() << '\n';
+            return true;
+        }
+
+        constexpr std::string_view useNnuePrefix = "name UseNNUE value ";
+        if (startsWith(args, useNnuePrefix)) {
+            const std::string_view value = trim(args.substr(useNnuePrefix.size()));
+
+            if (iequals(value, "true") || iequals(value, "on") || value == "1") {
+                if (!NNUE::loaded() && !NNUE::loadNetwork(nnueFile_)) {
+                    useNNUE_ = false;
+                    out << "info string failed to load PhoenixNet: " << nnueFile_ << '\n';
+                    return false;
+                }
+
+                useNNUE_ = true;
+                search_.clearHash();
+                out << "info string NNUE enabled: " << NNUE::loadedPath() << '\n';
+                return true;
+            }
+
+            if (iequals(value, "false") || iequals(value, "off") || value == "0") {
+                NNUE::unloadNetwork();
+                useNNUE_ = false;
+                search_.clearHash();
+                out << "info string NNUE disabled; using HCE fallback\n";
+                return true;
+            }
+
+            out << "info string UseNNUE must be true or false\n";
+            return false;
+        }
+
+        if (args == "name ReloadNNUE") {
+            if (!NNUE::loadNetwork(nnueFile_)) {
+                out << "info string failed to reload PhoenixNet: " << nnueFile_ << '\n';
+                return false;
+            }
+
+            useNNUE_ = true;
+            search_.clearHash();
+            out << "info string PhoenixNet reloaded: " << NNUE::loadedPath() << '\n';
+            return true;
+        }
+
         if (args == "name Clear Hash") {
             search_.clearHash();
             out << "info string Hash cleared\n";
             return true;
         }
+
+        if (Tuning::handleSetOption(args, search_, out))
+            return true;
 
         out << "info string unsupported option\n";
         return false;
@@ -542,14 +617,21 @@ namespace ironphoenix {
                 << "option name StartFEN type string default <none>\n"
                 << "option name Hash type spin default 64 min 1 max 4096\n"
                 << "option name MultiPV type spin default 1 min 1 max " << SearchEngine::MAX_MULTI_PV << "\n"
-                << "option name Clear Hash type button\n"
-                << "uciok\n";
+                << "option name EvalFile type string default " << nnueFile_ << "\n"
+                << "option name UseNNUE type check default " << (useNNUE_ ? "true" : "false") << "\n"
+                << "option name ReloadNNUE type button\n"
+                << "option name Clear Hash type button\n";
+            Tuning::printUciOptions(out);
+            out << "uciok\n";
         }
         else if (line == "isready") {
             out << "readyok\n";
         }
         else if (line == "help") {
             printHelp(out);
+        }
+        else if (line == "tuneparams") {
+            Tuning::printCurrent(out);
         }
         else if (line == "ucinewgame") {
             search_.newGame();

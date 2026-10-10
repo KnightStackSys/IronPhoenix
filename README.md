@@ -32,10 +32,12 @@ IronPhoenix includes a modern alpha-beta search stack designed specifically for 
 
 - Negamax / PVS-style search
 - Quiescence search
+- Aspiration Windows
 - Transposition tables
 - History-based move ordering
 - Static Exchange Evaluation (SEE)
 - Late Move Reductions (LMR)
+- Late Move Pruning (LMP)
 - Search pruning and reductions
 - Iterative deepening
 - Principal variation reporting
