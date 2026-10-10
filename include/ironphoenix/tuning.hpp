@@ -34,6 +34,14 @@ namespace ironphoenix {
             int bishopMobility = 4;
             int rookMobility = 2;
             int queenMobility = 1;
+
+            // Development rewards pieces that leave their player's home back
+            // line. The score is tapered by remaining non-pawn material so the
+            // term naturally fades as the game leaves the opening.
+            int developmentKnight = 8;
+            int developmentBishop = 8;
+            int developmentRook = 2;
+            int developmentQueen = 0;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

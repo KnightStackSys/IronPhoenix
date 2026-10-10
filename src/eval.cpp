@@ -5,9 +5,13 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
+#include <algorithm>
+
 namespace ironphoenix::Eval {
 
     namespace {
+
+        constexpr int STARTING_NON_PAWN_MATERIAL = 13'600;
 
         IRONPHOENIX_FORCE_INLINE int evalValue(PieceType pt) noexcept {
             const auto& params = Tuning::eval();
@@ -34,9 +38,31 @@ namespace ironphoenix::Eval {
             }
         }
 
+        IRONPHOENIX_FORCE_INLINE int developmentWeight(PieceType pt) noexcept {
+            const auto& params = Tuning::eval();
+
+            switch (pt) {
+            case KNIGHT: return params.developmentKnight;
+            case BISHOP: return params.developmentBishop;
+            case ROOK:   return params.developmentRook;
+            case QUEEN:  return params.developmentQueen;
+            default:     return 0;
+            }
+        }
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool onHomeBackLine(Color c, Square sq) noexcept {
+            switch (c) {
+            case RED:    return Geometry::rankOf(sq) == 0;
+            case BLUE:   return Geometry::fileOf(sq) == 0;
+            case YELLOW: return Geometry::rankOf(sq) == BOARD_RANKS - 1;
+            case GREEN:  return Geometry::fileOf(sq) == BOARD_FILES - 1;
+            }
+            return false;
         }
 
         int materialForColor(const Position& pos, Color c) noexcept {
@@ -93,18 +119,62 @@ namespace ironphoenix::Eval {
             return score;
         }
 
-        int playerScore(const Position& pos, Color c) noexcept {
+        int remainingNonPawnMaterial(const Position& pos) noexcept {
+            int material = 0;
+
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color c = static_cast<Color>(ci);
+                for (unsigned pt = KNIGHT; pt <= QUEEN; ++pt) {
+                    const PieceType pieceType = static_cast<PieceType>(pt);
+                    material += pos.pieces(c, pieceType).popcount() * pieceValue(pieceType);
+                }
+            }
+
+            // Promotions can take the board above starting material. Development
+            // should never grow beyond its full opening weight.
+            return std::min(material, STARTING_NON_PAWN_MATERIAL);
+        }
+
+        int developmentForColor(const Position& pos, Color c, int phaseMaterial) noexcept {
+            int score = 0;
+
+            // Development is position based rather than move-history based: a
+            // surviving piece earns its bonus while it is off the player's home
+            // back line. A piece that is captured cannot continue earning it.
+            for (unsigned pt = KNIGHT; pt <= QUEEN; ++pt) {
+                const PieceType pieceType = static_cast<PieceType>(pt);
+                const int weight = developmentWeight(pieceType);
+                if (weight == 0)
+                    continue;
+
+                Bitboard pieces = pos.pieces(c, pieceType);
+                while (pieces) {
+                    const Square sq = popLsb(pieces);
+                    if (!onHomeBackLine(c, sq))
+                        score += weight;
+                }
+            }
+
+            // Taper toward zero as non-pawn material disappears. This keeps the
+            // term focused on opening development instead of rewarding arbitrary
+            // piece placement in simplified middlegames and endgames.
+            return score * phaseMaterial / STARTING_NON_PAWN_MATERIAL;
+        }
+
+        int playerScore(const Position& pos, Color c, int phaseMaterial) noexcept {
             return materialForColor(pos, c)
-                + mobilityForColor(pos, c);
+                + mobilityForColor(pos, c)
+                + developmentForColor(pos, c, phaseMaterial);
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0;
             int team1 = 0;
+            const int phaseMaterial = remainingNonPawnMaterial(pos);
 
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
-                const int score = playerScore(pos, c);
+                const int score = playerScore(pos, c, phaseMaterial);
 
                 if (teamOf(c) == 0)
                     team0 += score;
