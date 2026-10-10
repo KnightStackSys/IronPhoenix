@@ -18,6 +18,8 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
+        constexpr int IIR_MIN_DEPTH = 5;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
@@ -412,6 +414,13 @@ namespace ironphoenix {
 
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
+
+        if (ply > 0
+            && depth >= IIR_MIN_DEPTH
+            && !inCheckNode
+            && !ttMove) {
+            --depth;
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
