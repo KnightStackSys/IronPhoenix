@@ -18,7 +18,7 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
-        constexpr int IIR_MIN_DEPTH = 5;
+        constexpr int IIR_MIN_DEPTH = 6;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -415,7 +415,11 @@ namespace ironphoenix {
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
 
-        if (ply > 0
+        // Internal Iterative Reduction (IIR): keep this deliberately conservative
+        // in 4PC. Only reduce deep PV nodes when move ordering has no TT move to
+        // guide the search. Non-PV nodes retain their full depth.
+        if (pvNode
+            && ply > 0
             && depth >= IIR_MIN_DEPTH
             && !inCheckNode
             && !ttMove) {
