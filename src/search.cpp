@@ -18,6 +18,12 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
+        // Internal Iterative Deepening (IID) is used only to obtain a move-ordering
+        // hint when a deep PV node has no TT move. The reduced search is deliberately
+        // several plies shallower to keep the extra work reasonable in 4PC.
+        constexpr int IID_MIN_DEPTH = 7;
+        constexpr int IID_REDUCTION = 3;
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
@@ -399,7 +405,7 @@ namespace ironphoenix {
         const int originalAlpha = alpha;
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
-        const Move ttMove = ttHit ? ttProbe.move : Move{};
+        Move ttMove = ttHit ? ttProbe.move : Move{};
 
         if (!pvNode && ply > 0 && ttHit && ttProbe.depth >= depth) {
             if (ttProbe.bound == TTBound::Exact)
@@ -412,6 +418,37 @@ namespace ironphoenix {
 
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
+
+        // Internal Iterative Deepening (IID): when a deep PV node has no TT move,
+        // run one shallower search only to seed move ordering. The full search that
+        // follows keeps the original depth; unlike IIR, IID does not reduce it.
+        // The thread-local guard prevents IID searches from recursively starting
+        // more IID searches inside their own subtree.
+        static thread_local bool iidSearchActive = false;
+        if (!iidSearchActive
+            && pvNode
+            && ply > 0
+            && depth >= IID_MIN_DEPTH
+            && !inCheckNode
+            && !ttMove
+            && alpha > -MATE_THRESHOLD
+            && beta < MATE_THRESHOLD) {
+
+            iidSearchActive = true;
+            (void)negamax(pos, depth - IID_REDUCTION, alpha, beta, ply, true);
+            iidSearchActive = false;
+
+            if (shouldStop())
+                return 0;
+
+            TTProbe iidProbe;
+            if (tt_.probe(pos.key(), ply, iidProbe))
+                ttMove = iidProbe.move;
+
+            // Discard the shallower PV. The full-depth search below owns this
+            // node's principal variation.
+            pvLength_[ply] = ply;
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
