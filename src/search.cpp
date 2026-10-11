@@ -17,6 +17,7 @@ namespace ironphoenix {
     namespace {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
+        constexpr int BAD_CAPTURE_SEE = -150;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -144,14 +145,17 @@ namespace ironphoenix {
         }
 
         if (move.isCapture()) {
-            // Split captures by SEE. Non-losing captures stay ahead of quiet moves,
-            // while losing captures fall behind the quiet-history stage. This avoids
-            // spending full-depth effort on obviously bad exchanges before strong
-            // quiet moves have had a chance to cause a cutoff.
+            // Split captures by SEE, but keep the threshold conservative for 4PC.
+            // Slightly losing captures can still be tactically important because two
+            // opponents and a partner may move before the exchange resolves. Checking
+            // captures are always kept in the high tactical ordering band.
             const int seeScore = std::clamp(see(pos, move), -5000, 5000);
             const int captureHistory = history_.captureScore(mover, movingPiece, move) * 2;
 
-            if (seeScore >= 0)
+            if (pos.givesCheck(move))
+                return 25'000'000 + seeScore * 64 + captureHistory;
+
+            if (seeScore >= BAD_CAPTURE_SEE)
                 return 20'000'000 + seeScore * 64 + captureHistory;
 
             return -10'000'000 + seeScore * 64 + captureHistory;
