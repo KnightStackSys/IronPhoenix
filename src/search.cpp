@@ -144,10 +144,17 @@ namespace ironphoenix {
         }
 
         if (move.isCapture()) {
-            int score = 20'000'000;
-            score += std::clamp(see(pos, move), -5000, 5000) * 64;
-            score += history_.captureScore(mover, movingPiece, move) * 2;
-            return score;
+            // Split captures by SEE. Non-losing captures stay ahead of quiet moves,
+            // while losing captures fall behind the quiet-history stage. This avoids
+            // spending full-depth effort on obviously bad exchanges before strong
+            // quiet moves have had a chance to cause a cutoff.
+            const int seeScore = std::clamp(see(pos, move), -5000, 5000);
+            const int captureHistory = history_.captureScore(mover, movingPiece, move) * 2;
+
+            if (seeScore >= 0)
+                return 20'000'000 + seeScore * 64 + captureHistory;
+
+            return -10'000'000 + seeScore * 64 + captureHistory;
         }
 
         int score = history_.quietScore(mover, move);
