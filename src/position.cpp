@@ -425,6 +425,45 @@ namespace ironphoenix {
         assert(verify());
     }
 
+    void Position::makeNullMove(StateInfo& st) {
+        const Color us = sideToMove_;
+
+        st.key = key_;
+        st.checkers = checkers_;
+        st.enPassant = enPassant_;
+        st.kingSq = kingSq_;
+        st.castlingRights = castlingRights_;
+        st.aliveMask = aliveMask_;
+        st.side = static_cast<std::uint8_t>(us);
+        st.moved = NO_PIECE;
+        st.captured = NO_PIECE;
+        st.capturedSq = SQ_NONE;
+
+        // In 4PC an en-passant marker belongs to the player who created it and
+        // normally expires when that player gets their next turn. A null move
+        // consumes that turn, so expire only the current player's marker.
+        setEnPassant(us, SQ_NONE);
+
+        const Color them = nextColor(us);
+        key_ ^= Zobrist::Side[us] ^ Zobrist::Side[them];
+        sideToMove_ = them;
+        refreshCheckers();
+
+        assert(verify());
+    }
+
+    void Position::undoNullMove(const StateInfo& st) {
+        enPassant_ = st.enPassant;
+        kingSq_ = st.kingSq;
+        castlingRights_ = st.castlingRights;
+        aliveMask_ = st.aliveMask;
+        sideToMove_ = static_cast<Color>(st.side);
+        checkers_ = st.checkers;
+        key_ = st.key;
+
+        assert(verify());
+    }
+
     Key Position::recomputeKey() const noexcept {
         Key k = Zobrist::Side[sideToMove_] ^ Zobrist::Ruleset[rulesetId_];
         for (unsigned sq = 0; sq < SQUARE_NB; ++sq) {

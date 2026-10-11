@@ -90,6 +90,12 @@ public:
     void makeMove(Move m, StateInfo& st);
     void undoMove(Move m, const StateInfo& st);
 
+    // Search-only null move. No piece moves; the current player's en-passant
+    // marker expires and the turn advances exactly as it would after a move.
+    // StateInfo makes the operation fully reversible for null-move pruning.
+    void makeNullMove(StateInfo& st);
+    void undoNullMove(const StateInfo& st);
+
     [[nodiscard]] Key recomputeKey() const noexcept;
     [[nodiscard]] bool verify() const noexcept;
 
