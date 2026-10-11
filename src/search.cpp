@@ -255,6 +255,15 @@ namespace ironphoenix {
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
 
+        // Mate Distance Pruning (MDP): scores closer to +/-MATE_SCORE than the
+        // current ply can physically achieve are impossible. IronPhoenix scores
+        // an immediate terminal king capture as MATE_SCORE - (ply + 1), while a
+        // side already mated at this node scores -MATE_SCORE + ply.
+        alpha = std::max(alpha, -MATE_SCORE + ply);
+        beta = std::min(beta, MATE_SCORE - (ply + 1));
+        if (alpha >= beta)
+            return alpha;
+
         const int originalAlpha = alpha;
         const bool inCheckNode = pos.inCheck();
 
@@ -395,6 +404,14 @@ namespace ironphoenix {
         ++nodes_;
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
+
+        // Mate Distance Pruning (MDP): tighten the search window to the best and
+        // worst mate scores that are still reachable from this ply. If the mate
+        // bounds collapse the window, the node cannot improve the caller's result.
+        alpha = std::max(alpha, -MATE_SCORE + ply);
+        beta = std::min(beta, MATE_SCORE - (ply + 1));
+        if (alpha >= beta)
+            return alpha;
 
         const int originalAlpha = alpha;
         TTProbe ttProbe;
