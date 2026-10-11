@@ -17,6 +17,7 @@ namespace ironphoenix {
     namespace {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
+        constexpr int GOOD_CAPTURE_VICTIM_SCALE = 32;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -151,8 +152,22 @@ namespace ironphoenix {
             const int seeScore = std::clamp(see(pos, move), -5000, 5000);
             const int captureHistory = history_.captureScore(mover, movingPiece, move) * 2;
 
+            // Refine only the good-capture bucket by victim value. SEE remains the
+            // primary signal; captured material is a modest tiebreaker. Resolve the
+            // victim through capturedSquare as a fallback so en-passant is ordered
+            // using the actual captured pawn as well.
+            Piece captured = move.captured();
+            if (!isPiece(captured)) {
+                const Square capSq = pos.capturedSquare(move, mover);
+                if (capSq != SQ_NONE)
+                    captured = pos.pieceAt(capSq);
+            }
+            const int victimBonus = isPiece(captured)
+                ? pieceValue(captured) * GOOD_CAPTURE_VICTIM_SCALE
+                : 0;
+
             if (seeScore >= 0)
-                return 20'000'000 + seeScore * 64 + captureHistory;
+                return 20'000'000 + seeScore * 64 + victimBonus + captureHistory;
 
             return -10'000'000 + seeScore * 64 + captureHistory;
         }
