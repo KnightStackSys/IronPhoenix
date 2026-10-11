@@ -17,6 +17,7 @@ namespace ironphoenix {
     namespace {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
+        constexpr int DELTA_MARGIN = 200;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -281,10 +282,12 @@ namespace ironphoenix {
         }
 
         int bestScore = -INF;
+        int staticEval = -INF;
         Move bestMove{};
 
         if (!inCheckNode) {
-            bestScore = evaluate(pos);
+            staticEval = evaluate(pos);
+            bestScore = staticEval;
 
             if (bestScore >= beta) {
                 tt_.store(pos.key(), 0, bestScore, TTBound::Lower, Move{}, pvNode, ply);
@@ -319,6 +322,31 @@ namespace ironphoenix {
 
             const bool terminalKingCapture = isTerminalKingCapture(pos, move);
             const bool givesCheckMove = !terminalKingCapture && pos.givesCheck(move);
+            const bool normalWindow = alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD;
+
+            // Delta pruning: in quiet qsearch positions, skip a non-checking
+            // capture when even the captured material plus a safety margin cannot
+            // raise alpha. Promotions and terminal king captures are never pruned.
+            // Keep PV qsearch exact and avoid all mate-window applications.
+            if (!pvNode
+                && !inCheckNode
+                && normalWindow
+                && move.isCapture()
+                && !move.isPromotion()
+                && !terminalKingCapture
+                && !givesCheckMove) {
+                Piece captured = move.captured();
+                if (!isPiece(captured)) {
+                    const Square capSq = pos.capturedSquare(move, us);
+                    if (capSq != SQ_NONE)
+                        captured = pos.pieceAt(capSq);
+                }
+
+                if (isPiece(captured)
+                    && staticEval + pieceValue(captured) + DELTA_MARGIN <= alpha) {
+                    continue;
+                }
+            }
 
             int score = -INF;
             bool legal = true;
