@@ -22,6 +22,10 @@ namespace ironphoenix {
         constexpr int NULL_MOVE_DIVISOR = 190;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
 
+        // Non-PV nodes normally cut off quickly. Selecting only the strongest
+        // prefix lazily avoids sorting the entire high-branching 4PC move list.
+        constexpr std::size_t LAZY_PICK_LIMIT = 16;
+
         struct ScoredMove final {
             int score;
             Move move;
@@ -43,6 +47,16 @@ namespace ironphoenix {
 
         IRONPHOENIX_FORCE_INLINE bool cachedGivesCheck(const std::uint64_t* bits, std::size_t index) noexcept {
             return ((bits[index >> 6u] >> (index & 63u)) & 1ull) != 0;
+        }
+
+        IRONPHOENIX_FORCE_INLINE int captureOrderingScore(Piece movingPiece, Move move) noexcept {
+            // Full four-player SEE is expensive enough that using it on every
+            // generated capture purely for ordering costs substantial NPS.
+            // MVV/LVA gives us a cheap first-order tactical score; SEE is still
+            // used later by actual SEE pruning where its result affects search.
+            const int victim = pieceValue(move.captured());
+            const int attacker = pieceValue(movingPiece);
+            return victim * 128 - attacker * 8;
         }
 
     }
@@ -170,7 +184,7 @@ namespace ironphoenix {
         if (move.isPromotion()) {
             int score = 30'000'000 + pieceValue(promotedType(move.promotion())) * 128;
             if (move.isCapture()) {
-                score += std::clamp(see(pos, move), -5000, 5000) * 64;
+                score += captureOrderingScore(movingPiece, move);
                 score += history_.captureScore(mover, movingPiece, move) * 2;
             }
             return score;
@@ -178,7 +192,7 @@ namespace ironphoenix {
 
         if (move.isCapture()) {
             int score = 20'000'000;
-            score += std::clamp(see(pos, move), -5000, 5000) * 64;
+            score += captureOrderingScore(movingPiece, move);
             score += history_.captureScore(mover, movingPiece, move) * 2;
             return score;
         }
@@ -220,12 +234,12 @@ namespace ironphoenix {
             const Move move = begin[i];
             const bool terminal = move.isCapture() && isTerminalKingCapture(pos, move);
 
-            // A TT move does not need check information just to receive its
-            // ordering score, but compute it when the caller wants the cached
-            // metadata for the main move loop.
-            const bool givesCheck = !terminal
-                && (givesCheckBits != nullptr || move != ttMove)
-                && pos.givesCheck(move);
+            // Capture/promotion scores do not consume the check bonus, so avoid
+            // the expensive givesCheck() call unless the caller explicitly needs
+            // check metadata for pruning safety.
+            const bool needCheck = givesCheckBits != nullptr
+                || ((!move.isCapture() && !move.isPromotion()) && move != ttMove);
+            const bool givesCheck = !terminal && needCheck && pos.givesCheck(move);
 
             scored[i].score = moveScore(pos, move, ttMove, ply, givesCheck);
             scored[i].move = move;
@@ -547,13 +561,25 @@ namespace ironphoenix {
 
         std::array<int, MAX_MOVES> orderedScores;
         std::array<std::uint64_t, CHECK_BIT_WORDS> givesCheckBits;
-        orderMoves(pos,
-            moves.begin(),
-            moves.end(),
-            ttMove,
-            ply,
-            orderedScores.data(),
-            givesCheckBits.data());
+
+        if (pvNode) {
+            // PV nodes are comparatively rare and benefit from complete ordering.
+            // Keep their existing full sort and cached check metadata.
+            orderMoves(pos,
+                moves.begin(),
+                moves.end(),
+                ttMove,
+                ply,
+                orderedScores.data(),
+                givesCheckBits.data());
+        }
+        else {
+            // At cut nodes avoid sorting the entire move list and avoid eager
+            // givesCheck() calls. Score cheaply, then select the best few moves
+            // only as they are actually requested by the search loop.
+            for (std::size_t i = 0; i < moves.size; ++i)
+                orderedScores[i] = moveScore(pos, moves.moves[i], ttMove, ply, false);
+        }
 
         int legalMoves = 0;
         int bestScore = -INF;
@@ -565,15 +591,33 @@ namespace ironphoenix {
         std::size_t failedQuietCount = 0;
         std::size_t failedCaptureCount = 0;
 
-        std::size_t orderedIndex = 0;
-        for (Move move : moves) {
+        for (std::size_t moveIndex = 0; moveIndex < moves.size; ++moveIndex) {
             if (shouldStop())
                 break;
 
-            const std::size_t moveIndex = orderedIndex++;
+            if (!pvNode && moveIndex < LAZY_PICK_LIMIT) {
+                std::size_t bestIndex = moveIndex;
+                int bestOrderScore = orderedScores[moveIndex];
+
+                for (std::size_t j = moveIndex + 1; j < moves.size; ++j) {
+                    if (orderedScores[j] > bestOrderScore) {
+                        bestOrderScore = orderedScores[j];
+                        bestIndex = j;
+                    }
+                }
+
+                if (bestIndex != moveIndex) {
+                    std::swap(moves.moves[moveIndex], moves.moves[bestIndex]);
+                    std::swap(orderedScores[moveIndex], orderedScores[bestIndex]);
+                }
+            }
+
+            const Move move = moves.moves[moveIndex];
             const Piece movingPiece = pos.pieceAt(move.from());
             const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
-            const bool givesCheckMove = cachedGivesCheck(givesCheckBits.data(), moveIndex);
+            const bool givesCheckMove = pvNode
+                ? cachedGivesCheck(givesCheckBits.data(), moveIndex)
+                : (!terminalKingCapture && pos.givesCheck(move));
             const bool quiet = !move.isCapture() && !move.isPromotion();
             const int lmrHistoryScore = quiet ? orderedScores[moveIndex] : 0;
 
