@@ -17,6 +17,7 @@ namespace ironphoenix {
     namespace {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
+        constexpr int BAD_CAPTURE_SEE = -150;
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
@@ -155,10 +156,20 @@ namespace ironphoenix {
         }
 
         if (move.isCapture()) {
-            int score = 20'000'000;
-            score += std::clamp(see(pos, move), -5000, 5000) * 64;
-            score += history_.captureScore(mover, movingPiece, move) * 2;
-            return score;
+            // Split captures by SEE, but keep the threshold conservative for 4PC.
+            // Slightly losing captures can still be tactically important because two
+            // opponents and a partner may move before the exchange resolves. Checking
+            // captures are always kept in the high tactical ordering band.
+            const int seeScore = std::clamp(see(pos, move), -5000, 5000);
+            const int captureHistory = history_.captureScore(mover, movingPiece, move) * 2;
+
+            if (pos.givesCheck(move))
+                return 25'000'000 + seeScore * 64 + captureHistory;
+
+            if (seeScore >= BAD_CAPTURE_SEE)
+                return 20'000'000 + seeScore * 64 + captureHistory;
+
+            return -10'000'000 + seeScore * 64 + captureHistory;
         }
 
         int score = history_.quietScore(mover, move);
