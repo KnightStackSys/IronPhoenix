@@ -117,6 +117,13 @@ private:
 
     void rawPut(Square sq, Piece p) noexcept;
     Piece rawRemove(Square sq) noexcept;
+
+    // Undo restores the complete reversible state from StateInfo afterwards,
+    // so these variants update only board/bitboards/occupancy and intentionally
+    // skip Zobrist and king-square maintenance.
+    void rawPutNoState(Square sq, Piece p) noexcept;
+    Piece rawRemoveNoState(Square sq) noexcept;
+
     void refreshCheckers() noexcept;
     void updateCastlingRightsForMove(Piece moving, Square from, Piece captured, Square capturedSq) noexcept;
 };
