@@ -8,27 +8,27 @@
 namespace ironphoenix {
     namespace {
 
-        Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
+        IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             return teamOf(c) == 0
                 ? (pos.occupancy(RED) | pos.occupancy(YELLOW))
                 : (pos.occupancy(BLUE) | pos.occupancy(GREEN));
         }
 
-        Bitboard enemyOccupancy(const Position& pos, Color c) noexcept {
+        IRONPHOENIX_FORCE_INLINE Bitboard enemyOccupancy(const Position& pos, Color c) noexcept {
             return teamOf(c) == 0
                 ? (pos.occupancy(BLUE) | pos.occupancy(GREEN))
                 : (pos.occupancy(RED) | pos.occupancy(YELLOW));
         }
 
-        void pushPromotions(MoveList& out, Square from, Square to, Piece captured, std::uint32_t flags = MF_NONE) {
+        IRONPHOENIX_FORCE_INLINE void pushPromotions(MoveList& out, Square from, Square to, Piece captured, std::uint32_t flags = MF_NONE) noexcept {
             out.push(Move(from, to, captured, PROMO_QUEEN, flags));
             out.push(Move(from, to, captured, PROMO_ROOK, flags));
             out.push(Move(from, to, captured, PROMO_BISHOP, flags));
             out.push(Move(from, to, captured, PROMO_KNIGHT, flags));
         }
 
-        void pushPawnMove(Color us, MoveList& out, Square from, Square to, Piece captured = NO_PIECE,
-            std::uint32_t flags = MF_NONE) {
+        IRONPHOENIX_FORCE_INLINE void pushPawnMove(Color us, MoveList& out, Square from, Square to, Piece captured = NO_PIECE,
+            std::uint32_t flags = MF_NONE) noexcept {
             if (Geometry::isPromotionSquare(us, to))
                 pushPromotions(out, from, to, captured, flags);
             else
@@ -123,6 +123,27 @@ namespace ironphoenix {
             return out;
         }
 
+        IRONPHOENIX_FORCE_INLINE void addEnPassantMoves(const Position& pos, Color us, Square from, MoveList& out) noexcept {
+            const Bitboard attacks = Geometry::PawnAttacks[us][from];
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color owner = static_cast<Color>(ci);
+                if (!enemy(us, owner))
+                    continue;
+
+                const Square ep = pos.enPassant(owner);
+                if (ep == SQ_NONE || !attacks.test(ep))
+                    continue;
+
+                const Square victimSq = Geometry::step(ep, Geometry::pawnForward(owner));
+                if (victimSq == SQ_NONE)
+                    continue;
+
+                const Piece victim = pos.pieceAt(victimSq);
+                if (victim == makePiece(owner, PAWN))
+                    out.push(makeEnPassantMove(from, ep, victim, owner));
+            }
+        }
+
     }
 
     void generatePseudoLegalMoves(const Position& pos, MoveList& out) {
@@ -156,23 +177,7 @@ namespace ironphoenix {
                 pushPawnMove(us, out, from, to, pos.pieceAt(to));
             }
 
-            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
-                const Color owner = static_cast<Color>(ci);
-                if (!enemy(us, owner))
-                    continue;
-                const Square ep = pos.enPassant(owner);
-                if (ep == SQ_NONE || !Geometry::PawnAttacks[us][from].test(ep))
-                    continue;
-
-                const Square victimSq = Geometry::step(ep, Geometry::pawnForward(owner));
-                if (victimSq == SQ_NONE)
-                    continue;
-                const Piece victim = pos.pieceAt(victimSq);
-                if (victim != makePiece(owner, PAWN))
-                    continue;
-
-                out.push(makeEnPassantMove(from, ep, victim, owner));
-            }
+            addEnPassantMoves(pos, us, from, out);
         }
 
         Bitboard bb = pos.pieces(us, KNIGHT);
@@ -229,6 +234,88 @@ namespace ironphoenix {
             const CastleLane& lane = pos.castleDefinition(us, laneIndex);
             if (castlePseudoLegal(pos, us, lane))
                 out.push(Move(lane.kingFrom, lane.kingTo, NO_PIECE, PROMO_NONE, MF_CASTLE));
+        }
+    }
+
+    void generateTacticalMoves(const Position& pos, MoveList& out) {
+        out.clear();
+        const Color us = pos.sideToMove();
+        if (!pos.isAlive(us))
+            return;
+
+        const Bitboard all = pos.occupancy();
+        const Bitboard enemies = enemyOccupancy(pos, us);
+
+        // Quiescence needs captures, en-passant and promotions. Quiet pawn
+        // moves are generated only when they promote.
+        Bitboard pawns = pos.pieces(us, PAWN);
+        while (pawns) {
+            const Square from = popLsb(pawns);
+            const Square one = Geometry::step(from, Geometry::pawnForward(us));
+
+            if (one != SQ_NONE
+                && Geometry::isPromotionSquare(us, one)
+                && pos.pieceAt(one) == NO_PIECE) {
+                pushPromotions(out, from, one, NO_PIECE);
+            }
+
+            Bitboard caps = Geometry::PawnAttacks[us][from] & enemies;
+            while (caps) {
+                const Square to = popLsb(caps);
+                pushPawnMove(us, out, from, to, pos.pieceAt(to));
+            }
+
+            addEnPassantMoves(pos, us, from, out);
+        }
+
+        Bitboard bb = pos.pieces(us, KNIGHT);
+        while (bb) {
+            const Square from = popLsb(bb);
+            Bitboard targets = Geometry::KnightAttacks[from] & enemies;
+            while (targets) {
+                const Square to = popLsb(targets);
+                out.push(Move(from, to, pos.pieceAt(to)));
+            }
+        }
+
+        bb = pos.pieces(us, BISHOP);
+        while (bb) {
+            const Square from = popLsb(bb);
+            Bitboard targets = Geometry::bishopAttacks(from, all) & enemies;
+            while (targets) {
+                const Square to = popLsb(targets);
+                out.push(Move(from, to, pos.pieceAt(to)));
+            }
+        }
+
+        bb = pos.pieces(us, ROOK);
+        while (bb) {
+            const Square from = popLsb(bb);
+            Bitboard targets = Geometry::rookAttacks(from, all) & enemies;
+            while (targets) {
+                const Square to = popLsb(targets);
+                out.push(Move(from, to, pos.pieceAt(to)));
+            }
+        }
+
+        bb = pos.pieces(us, QUEEN);
+        while (bb) {
+            const Square from = popLsb(bb);
+            Bitboard targets = Geometry::queenAttacks(from, all) & enemies;
+            while (targets) {
+                const Square to = popLsb(targets);
+                out.push(Move(from, to, pos.pieceAt(to)));
+            }
+        }
+
+        bb = pos.pieces(us, KING);
+        while (bb) {
+            const Square from = popLsb(bb);
+            Bitboard targets = Geometry::KingAttacks[from] & enemies;
+            while (targets) {
+                const Square to = popLsb(targets);
+                out.push(Move(from, to, pos.pieceAt(to)));
+            }
         }
     }
 
