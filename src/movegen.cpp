@@ -152,7 +152,6 @@ namespace ironphoenix {
         if (!pos.isAlive(us))
             return;
 
-        const Bitboard all = pos.occupancy();
         const Bitboard friendlyTeam = teamOccupancy(pos, us);
         const Bitboard enemies = enemyOccupancy(pos, us);
 
@@ -193,7 +192,7 @@ namespace ironphoenix {
         bb = pos.pieces(us, BISHOP);
         while (bb) {
             const Square from = popLsb(bb);
-            Bitboard targets = Geometry::bishopAttacks(from, all) & ~friendlyTeam;
+            Bitboard targets = pos.bishopAttacks(from) & ~friendlyTeam;
             while (targets) {
                 const Square to = popLsb(targets);
                 out.push(Move(from, to, pos.pieceAt(to)));
@@ -203,7 +202,7 @@ namespace ironphoenix {
         bb = pos.pieces(us, ROOK);
         while (bb) {
             const Square from = popLsb(bb);
-            Bitboard targets = Geometry::rookAttacks(from, all) & ~friendlyTeam;
+            Bitboard targets = pos.rookAttacks(from) & ~friendlyTeam;
             while (targets) {
                 const Square to = popLsb(targets);
                 out.push(Move(from, to, pos.pieceAt(to)));
@@ -213,7 +212,7 @@ namespace ironphoenix {
         bb = pos.pieces(us, QUEEN);
         while (bb) {
             const Square from = popLsb(bb);
-            Bitboard targets = Geometry::queenAttacks(from, all) & ~friendlyTeam;
+            Bitboard targets = pos.queenAttacks(from) & ~friendlyTeam;
             while (targets) {
                 const Square to = popLsb(targets);
                 out.push(Move(from, to, pos.pieceAt(to)));
@@ -243,7 +242,6 @@ namespace ironphoenix {
         if (!pos.isAlive(us))
             return;
 
-        const Bitboard all = pos.occupancy();
         const Bitboard enemies = enemyOccupancy(pos, us);
 
         // Quiescence needs captures, en-passant and promotions. Quiet pawn
@@ -281,7 +279,7 @@ namespace ironphoenix {
         bb = pos.pieces(us, BISHOP);
         while (bb) {
             const Square from = popLsb(bb);
-            Bitboard targets = Geometry::bishopAttacks(from, all) & enemies;
+            Bitboard targets = pos.bishopAttacks(from) & enemies;
             while (targets) {
                 const Square to = popLsb(targets);
                 out.push(Move(from, to, pos.pieceAt(to)));
@@ -291,7 +289,7 @@ namespace ironphoenix {
         bb = pos.pieces(us, ROOK);
         while (bb) {
             const Square from = popLsb(bb);
-            Bitboard targets = Geometry::rookAttacks(from, all) & enemies;
+            Bitboard targets = pos.rookAttacks(from) & enemies;
             while (targets) {
                 const Square to = popLsb(targets);
                 out.push(Move(from, to, pos.pieceAt(to)));
@@ -301,7 +299,7 @@ namespace ironphoenix {
         bb = pos.pieces(us, QUEEN);
         while (bb) {
             const Square from = popLsb(bb);
-            Bitboard targets = Geometry::queenAttacks(from, all) & enemies;
+            Bitboard targets = pos.queenAttacks(from) & enemies;
             while (targets) {
                 const Square to = popLsb(targets);
                 out.push(Move(from, to, pos.pieceAt(to)));
