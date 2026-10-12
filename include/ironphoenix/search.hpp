@@ -33,6 +33,29 @@ namespace ironphoenix {
         std::array<std::int64_t, COLOR_NB> delayMs{};
     };
 
+    // Per-ply search state. HistoryContext remains the base so the existing
+    // history/countermove interfaces can consume stack entries directly.
+    // The evaluation fields are used to compare the current player with the
+    // same player's position one complete 4PC turn cycle (four plies) ago.
+    struct SearchStackEntry : HistoryContext {
+        int staticEval = 0;
+        int improvementRate = 0;
+        bool improving = false;
+
+        constexpr SearchStackEntry() noexcept = default;
+
+        constexpr SearchStackEntry(const HistoryContext& context) noexcept
+            : HistoryContext(context) {}
+
+        constexpr SearchStackEntry& operator=(const HistoryContext& context) noexcept {
+            static_cast<HistoryContext&>(*this) = context;
+            staticEval = 0;
+            improvementRate = 0;
+            improving = false;
+            return *this;
+        }
+    };
+
     class SearchEngine {
     public:
         static constexpr int MAX_MULTI_PV = 32;
@@ -79,7 +102,7 @@ namespace ironphoenix {
 
         std::array<std::array<Move, MAX_PLY>, MAX_PLY> pv_{};
         std::array<int, MAX_PLY> pvLength_{};
-        std::array<HistoryContext, MAX_PLY> searchStack_{};
+        std::array<SearchStackEntry, MAX_PLY> searchStack_{};
         mutable std::mutex outputMutex_;
 
         void run(Position position, std::ostream& out);

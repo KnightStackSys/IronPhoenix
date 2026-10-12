@@ -17,6 +17,8 @@ namespace ironphoenix {
     namespace {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
+        constexpr int IMPROVING_MARGIN = 25;
+        constexpr int WORSENING_MARGIN = -100;
 
         constexpr int NULL_MOVE_MIN_DEPTH = 4;
         constexpr int NULL_MOVE_BASE_REDUCTION = 2;
@@ -488,6 +490,27 @@ namespace ironphoenix {
             }
         }
 
+        // In 4PC, compare against four plies ago so the static evaluation is
+        // measured from the same player's perspective after a complete turn
+        // cycle. A small positive margin prevents evaluation noise from
+        // constantly toggling the improving flag.
+        SearchStackEntry& ss = searchStack_[ply];
+        ss.staticEval = evaluate(pos);
+        ss.improvementRate = 0;
+        ss.improving = false;
+
+        if (ply >= 4) {
+            ss.improvementRate = ss.staticEval - searchStack_[ply - 4].staticEval;
+            ss.improving = ss.improvementRate > IMPROVING_MARGIN;
+        }
+
+        int lmpMoveLimit = 3 + depth * depth;
+        if (ss.improving)
+            lmpMoveLimit += 2 + depth;
+        else if (ss.improvementRate < WORSENING_MARGIN)
+            lmpMoveLimit -= 1 + depth / 2;
+        lmpMoveLimit = std::max(3, lmpMoveLimit);
+
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
         orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
@@ -519,11 +542,13 @@ namespace ironphoenix {
 
             // Late Move Pruning (LMP): at non-PV nodes, stop spending search
             // effort on late quiet moves unless history says the move is
-            // promising. Checks, TT moves, promotions/captures, and mate-window
-            // searches are never pruned here. This intentionally has no depth cap.
+            // promising. Improving positions search more quiet moves before
+            // pruning; strongly worsening positions prune a little earlier.
+            // Checks, TT moves, promotions/captures, and mate-window searches
+            // are never pruned here. This intentionally has no depth cap.
             if (!pvNode
                 && !inCheckNode
-                && legalMoves >= 3 + depth * depth
+                && legalMoves >= lmpMoveLimit
                 && quiet
                 && move != ttMove
                 && !givesCheckMove
@@ -730,7 +755,7 @@ namespace ironphoenix {
         for (auto& row : pv_)
             row.fill(Move{});
         pvLength_.fill(0);
-        searchStack_.fill(HistoryContext{});
+        searchStack_.fill(SearchStackEntry{});
 
         MoveList rootLegal;
         generateLegalMoves(position, rootLegal);
