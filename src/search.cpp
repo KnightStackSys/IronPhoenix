@@ -469,33 +469,31 @@ namespace ironphoenix {
             && !mateWindow
             && hasNonPawnMaterial(pos, us)) {
 
-            if (staticEval >= beta) {
-                StateInfo nullState;
-                pos.makeNullMove(nullState);
-                searchStack_[ply + 1] = HistoryContext{};
-
-				// Dynamic null-move reduction: reduce the depth more aggressively
-                // at deeper nodes and for higher static evaluations.
-                const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / 190);
-                const int nullScore = -negamax(
-                    pos,
-                    depth - reduction,
-                    -beta,
-                    -beta + 1,
-                    ply + 1,
-                    false,
-                    false
-                );
-
-                pos.undoNullMove(nullState);
-
-                if (shouldStop())
-                    return 0;
-
-                // Never manufacture a mate score from a synthetic pass.
-                if (nullScore >= beta && nullScore < MATE_THRESHOLD)
-                    return nullScore;
-            }
+            StateInfo nullState;
+            pos.makeNullMove(nullState);
+            searchStack_[ply + 1] = HistoryContext{};
+            
+		    // Dynamic null-move reduction: reduce the depth more aggressively
+            // at deeper nodes and for higher static evaluations.
+            const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / 190);
+            const int nullScore = -negamax(
+                pos,
+                depth - reduction,
+                -beta,
+                -beta + 1,
+                ply + 1,
+                false,
+                false
+            );
+            
+            pos.undoNullMove(nullState);
+            
+            if (shouldStop())
+                return 0;
+            
+            // Never manufacture a mate score from a synthetic pass.
+            if (nullScore >= beta && nullScore < MATE_THRESHOLD)
+                return nullScore;
         }
 
         MoveList moves;
