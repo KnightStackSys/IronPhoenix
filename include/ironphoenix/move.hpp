@@ -26,7 +26,10 @@ enum Promotion : std::uint8_t {
 };
 
 struct Move {
-    std::uint32_t v = 0;
+    // Intentionally no default member initializer. Plain local arrays of Move
+    // can stay uninitialized, avoiding large memset-style clears in every
+    // search node. Value-initialized Move{} still produces the null move.
+    std::uint32_t v;
 
     constexpr Move() noexcept = default;
     constexpr explicit Move(std::uint32_t raw) noexcept : v(raw) {}
