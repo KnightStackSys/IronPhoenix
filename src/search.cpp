@@ -18,6 +18,12 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
+        // History Move Pruning (HMP): only prune very poorly scoring quiet
+        // moves at shallow non-PV nodes. The threshold becomes more conservative
+        // with depth because deeper nodes deserve more tactical coverage.
+        constexpr int HISTORY_MOVE_PRUNE_MAX_DEPTH = 4;
+        constexpr int HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH = 1'500;
+
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
@@ -639,6 +645,21 @@ namespace ironphoenix {
                 && !givesCheckMove
                 && !moveMateWindow
                 && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
+                continue;
+            }
+
+            // History Move Pruning (HMP): prune quiet moves with strongly negative
+            // accumulated history before they consume a search. Keep it shallow,
+            // protect the first legal move, and never prune tactical/special moves.
+            if (!pvNode
+                && !inCheckNode
+                && depth <= HISTORY_MOVE_PRUNE_MAX_DEPTH
+                && legalMoves > 0
+                && quiet
+                && move != ttMove
+                && !givesCheckMove
+                && !moveMateWindow
+                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth) {
                 continue;
             }
 
