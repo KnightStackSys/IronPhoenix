@@ -15,6 +15,10 @@ constexpr unsigned GENERATION_SHIFT = 3u;
 constexpr std::uint8_t GENERATION_MASK = 0xF8u;
 constexpr std::uint8_t GENERATION_MOD = 32u;
 
+IRONPHOENIX_FORCE_INLINE std::uint32_t keySignature(Key key) noexcept {
+    return static_cast<std::uint32_t>(key >> 32u);
+}
+
 }
 
 TranspositionTable::TranspositionTable(std::size_t megabytes) {
@@ -87,12 +91,14 @@ bool TranspositionTable::probe(Key key, int ply, TTProbe& out) const noexcept {
     if (table_.empty())
         return false;
 
+    const std::uint32_t signature = keySignature(key);
     const Cluster& cluster = table_[static_cast<std::size_t>(key) & mask_];
     for (const Entry& entry : cluster.entry) {
-        if (entry.key == key && entry.key != 0) {
+        if (entry.depth >= 0 && entry.key == signature) {
             out.hit = true;
             out.move = Move(entry.move);
             out.score = scoreFromTT(entry.score, ply);
+            out.eval = entry.eval;
             out.depth = entry.depth;
             out.bound = boundOf(entry);
             out.pvNode = pvOf(entry);
@@ -105,6 +111,7 @@ bool TranspositionTable::probe(Key key, int ply, TTProbe& out) const noexcept {
 void TranspositionTable::store(Key key,
                                int depth,
                                int score,
+                               int staticEval,
                                TTBound bound,
                                Move bestMove,
                                bool pvNode,
@@ -112,15 +119,16 @@ void TranspositionTable::store(Key key,
     if (table_.empty())
         return;
 
+    const std::uint32_t signature = keySignature(key);
     Cluster& cluster = table_[static_cast<std::size_t>(key) & mask_];
     Entry* replace = &cluster.entry[0];
 
     for (Entry& entry : cluster.entry) {
-        if (entry.key == key) {
+        if (entry.depth >= 0 && entry.key == signature) {
             replace = &entry;
             break;
         }
-        if (entry.key == 0) {
+        if (entry.depth < 0) {
             replace = &entry;
             break;
         }
@@ -135,13 +143,20 @@ void TranspositionTable::store(Key key,
             replace = &entry;
     }
 
-    if (!bestMove && replace->key == key)
+    const bool sameKey = replace->depth >= 0 && replace->key == signature;
+
+    if (!bestMove && sameKey)
         bestMove = Move(replace->move);
 
+    if (staticEval == TT_EVAL_NONE && sameKey)
+        staticEval = replace->eval;
+
     const int ttScore = scoreToTT(score, ply);
-    replace->key = key;
+    replace->key = signature;
     replace->move = bestMove.v;
     replace->score = static_cast<std::int16_t>(std::clamp(ttScore, -32767, 32767));
+    replace->eval = static_cast<std::int16_t>(
+        staticEval == TT_EVAL_NONE ? TT_EVAL_NONE : std::clamp(staticEval, -32767, 32767));
     replace->depth = static_cast<std::int8_t>(std::clamp(depth, -1, 127));
     replace->flags = static_cast<std::uint8_t>(static_cast<std::uint8_t>(bound)
                      | (pvNode ? PV_MASK : 0u)
@@ -157,7 +172,7 @@ int TranspositionTable::hashfull() const noexcept {
     std::size_t total = samples * 4;
     for (std::size_t i = 0; i < samples; ++i) {
         for (const Entry& entry : table_[i].entry) {
-            if (entry.key != 0 && generationOf(entry) == generation_)
+            if (entry.depth >= 0 && generationOf(entry) == generation_)
                 ++used;
         }
     }
