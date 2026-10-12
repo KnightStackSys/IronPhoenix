@@ -90,8 +90,14 @@ namespace ironphoenix {
         int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull = true);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
-        int moveScore(const Position& pos, Move move, Move ttMove, int ply) const noexcept;
-        void orderMoves(const Position& pos, Move* begin, Move* end, Move ttMove, int ply) const;
+        int moveScore(const Position& pos, Move move, Move ttMove, int ply, bool givesCheck) const noexcept;
+        void orderMoves(const Position& pos,
+                        Move* begin,
+                        Move* end,
+                        Move ttMove,
+                        int ply,
+                        int* orderedScores = nullptr,
+                        std::uint64_t* givesCheckBits = nullptr) const;
 
         [[nodiscard]] int historyBonus(int depth) const noexcept;
         void updateQuietCutoff(const Position& pos, Color mover, Move cutoffMove, Piece movingPiece,
