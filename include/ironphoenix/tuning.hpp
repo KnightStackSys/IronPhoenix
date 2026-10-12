@@ -35,14 +35,14 @@ namespace ironphoenix {
             int rookMobility = 2;
             int queenMobility = 1;
 
-            // Positional HCE terms. These intentionally start conservative so
-            // they can be strength-tested and tuned independently of material.
+            // 4PC-oriented positional HCE terms. These intentionally start
+            // conservative so each can be strength-tested and tuned.
             int bishopPairBonus = 30;
-            int pawnAdvanceBonus = 4;
             int supportedPawnBonus = 6;
             int kingPawnShieldBonus = 6;
             int checkPenalty = 40;
-            int knightCentralization = 3;
+            int kingZoneAttackPenalty = 5;
+            int partnerSupportBonus = 4;
             int tempoBonus = 8;
         };
 
