@@ -5,9 +5,6 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
-#include <algorithm>
-#include <cstdlib>
-
 namespace ironphoenix::Eval {
 
     namespace {
@@ -37,34 +34,12 @@ namespace ironphoenix::Eval {
             }
         }
 
+        IRONPHOENIX_FORCE_INLINE Color partnerOf(Color c) noexcept {
+            return static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
+        }
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
-            const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
-            return pos.occupancy(c) | pos.occupancy(partner);
-        }
-
-        IRONPHOENIX_FORCE_INLINE int pawnAdvance(Color c, Square sq) noexcept {
-            const int file = static_cast<int>(Geometry::fileOf(sq));
-            const int rank = static_cast<int>(Geometry::rankOf(sq));
-
-            int advance = 0;
-            switch (c) {
-            case RED:    advance = rank - 1; break;
-            case BLUE:   advance = file - 1; break;
-            case YELLOW: advance = 12 - rank; break;
-            case GREEN:  advance = 12 - file; break;
-            }
-
-            return std::clamp(advance, 0, 9);
-        }
-
-        IRONPHOENIX_FORCE_INLINE int centralizationUnits(Square sq) noexcept {
-            // The geometric center of the 14x14 board lies between coordinates
-            // 6 and 7 on each axis. Work in doubled coordinates to avoid floats.
-            const int file = static_cast<int>(Geometry::fileOf(sq));
-            const int rank = static_cast<int>(Geometry::rankOf(sq));
-            const int fileDistance = std::abs(file * 2 - 13);
-            const int rankDistance = std::abs(rank * 2 - 13);
-            return std::max(0, 12 - fileDistance - rankDistance);
+            return pos.occupancy(c) | pos.occupancy(partnerOf(c));
         }
 
         int materialForColor(const Position& pos, Color c) noexcept {
@@ -130,18 +105,22 @@ namespace ironphoenix::Eval {
 
         int pawnStructureForColor(const Position& pos, Color c) noexcept {
             const auto& params = Tuning::eval();
-            const Bitboard allPawns = pos.pieces(c, PAWN);
-            Bitboard pawns = allPawns;
+            const Color partner = partnerOf(c);
+            const Bitboard ownPawns = pos.pieces(c, PAWN);
+            const Bitboard partnerPawns = pos.isAlive(partner)
+                ? pos.pieces(partner, PAWN)
+                : Bitboard{};
+
+            Bitboard pawns = ownPawns;
             int score = 0;
 
             while (pawns) {
                 const Square sq = popLsb(pawns);
-                score += pawnAdvance(c, sq) * params.pawnAdvanceBonus;
 
-                // A pawn supported by another pawn is harder to attack and forms
-                // a more stable chain. PawnAttackers[c][sq] are the squares from
-                // which one of c's pawns would attack sq.
-                if (Geometry::PawnAttackers[c][sq] & allPawns)
+                // In teams, support from either player's pawn structure matters.
+                const bool ownSupport = static_cast<bool>(Geometry::PawnAttackers[c][sq] & ownPawns);
+                const bool partnerSupport = static_cast<bool>(Geometry::PawnAttackers[partner][sq] & partnerPawns);
+                if (ownSupport || partnerSupport)
                     score += params.supportedPawnBonus;
             }
 
@@ -153,14 +132,31 @@ namespace ironphoenix::Eval {
                 return 0;
 
             const auto& params = Tuning::eval();
+            const Color partner = partnerOf(c);
             const Square king = pos.kingSquare(c);
             if (king == SQ_NONE)
                 return 0;
 
+            const Bitboard occ = pos.occupancy();
+            const Bitboard teamPawns = pos.pieces(c, PAWN)
+                | (pos.isAlive(partner) ? pos.pieces(partner, PAWN) : Bitboard{});
+
             int score = 0;
 
-            const int pawnShield = (Geometry::KingAttacks[king] & pos.pieces(c, PAWN)).popcount();
+            // Either teammate's pawn can physically shelter the king.
+            const int pawnShield = (Geometry::KingAttacks[king] & teamPawns).popcount();
             score += pawnShield * params.kingPawnShieldBonus;
+
+            // 4PC king danger is more about enemy access to the king zone than
+            // generic board centralization. Count attacked adjacent king squares.
+            Bitboard kingZone = Geometry::KingAttacks[king] & Geometry::BoardMask;
+            int attackedZoneSquares = 0;
+            while (kingZone) {
+                const Square sq = popLsb(kingZone);
+                if (pos.isAttackedByEnemy(sq, c, occ))
+                    ++attackedZoneSquares;
+            }
+            score -= attackedZoneSquares * params.kingZoneAttackPenalty;
 
             if (pos.inCheck(c))
                 score -= params.checkPenalty;
@@ -168,14 +164,25 @@ namespace ironphoenix::Eval {
             return score;
         }
 
-        int knightPlacementForColor(const Position& pos, Color c) noexcept {
+        int partnerCoordinationForColor(const Position& pos, Color c) noexcept {
+            const Color partner = partnerOf(c);
+            if (!pos.isAlive(partner))
+                return 0;
+
             const auto& params = Tuning::eval();
-            Bitboard knights = pos.pieces(c, KNIGHT);
+            const Bitboard occ = pos.occupancy();
             int score = 0;
 
-            while (knights) {
-                const Square sq = popLsb(knights);
-                score += centralizationUnits(sq) * params.knightCentralization;
+            // Reward pieces that are directly defended by the teammate. This is
+            // a genuinely 4PC-specific coordination signal and is independent of
+            // geometric assumptions about where a piece "should" be placed.
+            for (unsigned pt = PAWN; pt <= QUEEN; ++pt) {
+                Bitboard pieces = pos.pieces(c, static_cast<PieceType>(pt));
+                while (pieces) {
+                    const Square sq = popLsb(pieces);
+                    if (pos.attackersTo(sq, partner, occ))
+                        score += params.partnerSupportBonus;
+                }
             }
 
             return score;
@@ -190,7 +197,7 @@ namespace ironphoenix::Eval {
                 + bishopPairForColor(pos, c)
                 + pawnStructureForColor(pos, c)
                 + kingSafetyForColor(pos, c)
-                + knightPlacementForColor(pos, c);
+                + partnerCoordinationForColor(pos, c);
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
