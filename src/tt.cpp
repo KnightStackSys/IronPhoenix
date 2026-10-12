@@ -83,7 +83,6 @@ int TranspositionTable::scoreFromTT(int score, int ply) noexcept {
 }
 
 bool TranspositionTable::probe(Key key, int ply, TTProbe& out) const noexcept {
-    out = TTProbe{};
     if (table_.empty())
         return false;
 

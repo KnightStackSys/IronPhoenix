@@ -103,6 +103,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
     startTime_ = std::chrono::steady_clock::now();
     timeBudgetMs_ = calculateTimeBudget(position, limits_);
     nodes_ = 0;
+    nextTimeCheckNode_ = 0;
     selDepth_ = 0;
 
     for (auto& row : pv_)

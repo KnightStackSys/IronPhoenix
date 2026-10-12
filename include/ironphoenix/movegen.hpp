@@ -12,7 +12,9 @@ namespace ironphoenix {
 constexpr std::size_t MAX_MOVES = 512;
 
 struct MoveList {
-    std::array<Move, MAX_MOVES> moves{};
+    // Deliberately left uninitialized. Only entries below size are ever read.
+    // This avoids clearing 2 KiB of move storage every time a MoveList is made.
+    std::array<Move, MAX_MOVES> moves;
     std::size_t size = 0;
 
     IRONPHOENIX_FORCE_INLINE void clear() noexcept { size = 0; }
@@ -27,6 +29,7 @@ struct MoveList {
 };
 
 void generatePseudoLegalMoves(const Position& pos, MoveList& out);
+void generateTacticalMoves(const Position& pos, MoveList& out);
 void generateLegalMoves(Position& pos, MoveList& out);
 
 [[nodiscard]] bool isTerminalKingCapture(const Position& pos, Move m) noexcept;

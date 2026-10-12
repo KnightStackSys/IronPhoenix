@@ -49,6 +49,11 @@ IRONPHOENIX_FORCE_INLINE int promotionBonus(PieceType attacker,
 }
 
 IRONPHOENIX_FORCE_INLINE Piece actualCapturedPiece(const Position& pos, Move m) noexcept {
+    // Generated moves already carry the captured piece, including en-passant.
+    // Keep the position lookup only as a fallback for externally constructed moves.
+    if (m.captured() != NO_PIECE)
+        return m.captured();
+
     const Piece moving = pos.pieceAt(m.from());
     if (moving == NO_PIECE)
         return NO_PIECE;
@@ -113,7 +118,9 @@ int see(const Position& pos, Move m, SeeMode mode) noexcept {
     if (captured != NO_PIECE && typeOf(captured) == KING && enemy(us, colorOf(captured)))
         return pieceValue(KING);
 
-    std::array<int, 64> gain{};
+    // Only entries up to depth are ever read, so avoid clearing the full array
+    // on every SEE invocation.
+    std::array<int, 64> gain;
     int depth = 0;
     gain[0] = captured == NO_PIECE ? 0 : pieceValue(captured);
 
@@ -126,7 +133,7 @@ int see(const Position& pos, Move m, SeeMode mode) noexcept {
     Bitboard occ = pos.occupancy();
     occ.reset(from);
 
-    const Square capSq = pos.capturedSquare(m, us);
+    const Square capSq = m.isEnPassant() ? pos.capturedSquare(m, us) : target;
     if (captured != NO_PIECE && capSq != SQ_NONE)
         occ.reset(capSq);
     occ.set(target);
