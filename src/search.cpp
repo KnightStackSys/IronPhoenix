@@ -20,10 +20,12 @@ namespace ironphoenix {
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
+        constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
 
         struct ScoredMove final {
             int score;
             Move move;
+            bool givesCheck;
         };
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
@@ -37,6 +39,10 @@ namespace ironphoenix {
                 | pos.pieces(c, ROOK)
                 | pos.pieces(c, QUEEN);
             return static_cast<bool>(pieces);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool cachedGivesCheck(const std::uint64_t* bits, std::size_t index) noexcept {
+            return ((bits[index >> 6u] >> (index & 63u)) & 1ull) != 0;
         }
 
     }
@@ -146,10 +152,15 @@ namespace ironphoenix {
         return std::min(params.historyBonusMax, params.historyBonusScale * depth * depth);
     }
 
-    int SearchEngine::moveScore(const Position& pos, Move move, Move ttMove, int ply) const noexcept {
+    int SearchEngine::moveScore(const Position& pos,
+        Move move,
+        Move ttMove,
+        int ply,
+        bool givesCheck) const noexcept {
+
         if (move == ttMove)
             return 50'000'000;
-        if (isTerminalKingCapture(pos, move))
+        if (move.isCapture() && isTerminalKingCapture(pos, move))
             return 45'000'000;
 
         const auto& tuning = Tuning::search();
@@ -186,27 +197,56 @@ namespace ironphoenix {
             score += (history_.continuationScore(ContinuationKind::SamePlayer, searchStack_[ply - 3], movingPiece, move.to()) * 3) / 4;
         }
 
-        if (pos.givesCheck(move))
+        if (givesCheck)
             score += tuning.checkMoveBonus;
 
         return score;
     }
 
-    void SearchEngine::orderMoves(const Position& pos, Move* begin, Move* end, Move ttMove, int ply) const {
+    void SearchEngine::orderMoves(const Position& pos,
+        Move* begin,
+        Move* end,
+        Move ttMove,
+        int ply,
+        int* orderedScores,
+        std::uint64_t* givesCheckBits) const {
+
         // Do not value-initialize all 512 scratch entries at every node. Only
         // the first count entries are written and subsequently read.
         std::array<ScoredMove, MAX_MOVES> scored;
         const std::size_t count = static_cast<std::size_t>(end - begin);
+
         for (std::size_t i = 0; i < count; ++i) {
-            scored[i].score = moveScore(pos, begin[i], ttMove, ply);
-            scored[i].move = begin[i];
+            const Move move = begin[i];
+            const bool terminal = move.isCapture() && isTerminalKingCapture(pos, move);
+
+            // A TT move does not need check information just to receive its
+            // ordering score, but compute it when the caller wants the cached
+            // metadata for the main move loop.
+            const bool givesCheck = !terminal
+                && (givesCheckBits != nullptr || move != ttMove)
+                && pos.givesCheck(move);
+
+            scored[i].score = moveScore(pos, move, ttMove, ply, givesCheck);
+            scored[i].move = move;
+            scored[i].givesCheck = givesCheck;
         }
 
         std::sort(scored.begin(), scored.begin() + count,
             [](const ScoredMove& a, const ScoredMove& b) { return a.score > b.score; });
 
-        for (std::size_t i = 0; i < count; ++i)
+        if (givesCheckBits) {
+            for (std::size_t i = 0; i < CHECK_BIT_WORDS; ++i)
+                givesCheckBits[i] = 0;
+        }
+
+        for (std::size_t i = 0; i < count; ++i) {
             begin[i] = scored[i].move;
+            if (orderedScores)
+                orderedScores[i] = scored[i].score;
+            if (givesCheckBits && scored[i].givesCheck)
+                givesCheckBits[i >> 6u] |= 1ull << (i & 63u);
+        }
     }
 
     void SearchEngine::updateQuietCutoff(const Position& pos,
@@ -339,7 +379,7 @@ namespace ironphoenix {
             if (shouldStop())
                 break;
 
-            const bool terminalKingCapture = isTerminalKingCapture(pos, move);
+            const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
 
             int score = -INF;
             bool legal = true;
@@ -504,30 +544,42 @@ namespace ironphoenix {
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
-        orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
+
+        std::array<int, MAX_MOVES> orderedScores;
+        std::array<std::uint64_t, CHECK_BIT_WORDS> givesCheckBits;
+        orderMoves(pos,
+            moves.begin(),
+            moves.end(),
+            ttMove,
+            ply,
+            orderedScores.data(),
+            givesCheckBits.data());
 
         int legalMoves = 0;
         int bestScore = -INF;
         Move bestMove{};
-        std::array<Move, MAX_MOVES> failedQuiets;
-        std::array<Move, MAX_MOVES> failedCaptures;
+
+        // Quiet failures grow from the front and capture failures from the back,
+        // replacing two 512-Move arrays with one without changing history updates.
+        std::array<Move, MAX_MOVES> failedMoves;
         std::size_t failedQuietCount = 0;
         std::size_t failedCaptureCount = 0;
 
+        std::size_t orderedIndex = 0;
         for (Move move : moves) {
             if (shouldStop())
                 break;
 
+            const std::size_t moveIndex = orderedIndex++;
             const Piece movingPiece = pos.pieceAt(move.from());
-            const bool terminalKingCapture = isTerminalKingCapture(pos, move);
-            const bool givesCheckMove = !terminalKingCapture && pos.givesCheck(move);
-            const int lmrHistoryScore = (!move.isCapture() && !move.isPromotion())
-                ? moveScore(pos, move, Move{}, ply)
-                : 0;
+            const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
+            const bool givesCheckMove = cachedGivesCheck(givesCheckBits.data(), moveIndex);
+            const bool quiet = !move.isCapture() && !move.isPromotion();
+            const int lmrHistoryScore = quiet ? orderedScores[moveIndex] : 0;
+
             int score = -INF;
             bool legal = true;
 
-            const bool quiet = !move.isCapture() && !move.isPromotion();
             const bool moveMateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
@@ -639,24 +691,26 @@ namespace ironphoenix {
             if (cutoff) {
                 if (!terminalKingCapture) {
                     if (move.isCapture()) {
+                        const Move* failedCaptures = failedMoves.data() + MAX_MOVES - failedCaptureCount;
                         updateCaptureCutoff(us, move, movingPiece, depth,
-                            failedCaptures.data(), failedCaptureCount, pos);
+                            failedCaptures, failedCaptureCount, pos);
                     }
                     else if (!move.isPromotion()) {
                         updateQuietCutoff(pos, us, move, movingPiece, depth, ply,
-                            failedQuiets.data(), failedQuietCount);
+                            failedMoves.data(), failedQuietCount);
                     }
                 }
                 break;
             }
 
-            if (move.isCapture()) {
-                if (failedCaptureCount < failedCaptures.size())
-                    failedCaptures[failedCaptureCount++] = move;
-            }
-            else if (!move.isPromotion()) {
-                if (failedQuietCount < failedQuiets.size())
-                    failedQuiets[failedQuietCount++] = move;
+            if (failedQuietCount + failedCaptureCount < failedMoves.size()) {
+                if (move.isCapture()) {
+                    ++failedCaptureCount;
+                    failedMoves[MAX_MOVES - failedCaptureCount] = move;
+                }
+                else if (!move.isPromotion()) {
+                    failedMoves[failedQuietCount++] = move;
+                }
             }
         }
 
