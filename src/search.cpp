@@ -20,6 +20,8 @@ namespace ironphoenix {
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
+        constexpr int REVERSE_FUTILITY_MAX_DEPTH = 4;
+        constexpr int REVERSE_FUTILITY_MARGIN_PER_DEPTH = 200;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
 
         // Non-PV nodes normally cut off quickly. Selecting only the strongest
@@ -510,10 +512,43 @@ namespace ironphoenix {
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
         const Color us = pos.sideToMove();
+        const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
-        // Null Move Pruning (NMP): keep expensive partner-check detection and
-        // static evaluation completely off nodes where NMP cannot run anyway.
+        // Static pruning shares one evaluator result between reverse futility
+        // pruning and null-move pruning. Keep partner-check detection lazy so PV,
+        // check and mate-window nodes do not pay for it.
+        int staticEval = 0;
+        bool staticEvalValid = false;
+        bool partnerInCheck = false;
+        bool partnerCheckKnown = false;
+
+        // Reverse Futility Pruning (RFP): at shallow non-PV nodes, if the static
+        // evaluation already exceeds beta by a depth-scaled safety margin, the
+        // position is unlikely to fall below beta after a normal move. Avoid RFP
+        // while either teammate is in check and never return a synthetic mate.
+        if (!pvNode
+            && ply > 0
+            && depth <= REVERSE_FUTILITY_MAX_DEPTH
+            && !inCheckNode
+            && !mateWindow
+            && hasNonPawnMaterial(pos, us)) {
+
+            partnerInCheck = pos.inCheck(partner);
+            partnerCheckKnown = true;
+
+            if (!partnerInCheck) {
+                staticEval = evaluate(pos);
+                staticEvalValid = true;
+
+                const int margin = REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth;
+                if (staticEval < MATE_THRESHOLD && staticEval - margin >= beta)
+                    return staticEval;
+            }
+        }
+
+        // Null Move Pruning (NMP): reuse the static evaluation and partner-check
+        // result when RFP already computed them at shallow nodes.
         if (allowNull
             && !pvNode
             && ply > 0
@@ -522,9 +557,16 @@ namespace ironphoenix {
             && !mateWindow
             && hasNonPawnMaterial(pos, us)) {
 
-            const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
-            if (!pos.inCheck(partner)) {
-                const int staticEval = evaluate(pos);
+            if (!partnerCheckKnown) {
+                partnerInCheck = pos.inCheck(partner);
+                partnerCheckKnown = true;
+            }
+
+            if (!partnerInCheck) {
+                if (!staticEvalValid) {
+                    staticEval = evaluate(pos);
+                    staticEvalValid = true;
+                }
 
                 if (staticEval >= beta) {
                     StateInfo nullState;
