@@ -18,9 +18,7 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
-        constexpr int NULL_MOVE_MIN_DEPTH = 4;
-        constexpr int NULL_MOVE_BASE_REDUCTION = 2;
-        constexpr int NULL_MOVE_DEPTH_DIVISOR = 4;
+        constexpr int NULL_MOVE_MIN_DEPTH = 2;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -430,6 +428,11 @@ namespace ironphoenix {
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
         const Move ttMove = ttHit ? ttProbe.move : Move{};
 
+		// Transposition Table (TT) Cutoffs: if the current position has been
+		// previously searched at a depth equal to or greater than the current
+		// depth, and the stored score is sufficient to cause a cutoff, return
+		// the stored score. This is only done at non-PV nodes, since PV nodes
+		// require a full search to find the best move.
         if (!pvNode && ply > 0 && ttHit && ttProbe.depth >= depth) {
             if (ttProbe.bound == TTBound::Exact)
                 return ttProbe.score;
@@ -438,10 +441,17 @@ namespace ironphoenix {
             if (ttProbe.bound == TTBound::Upper && ttProbe.score <= alpha)
                 return ttProbe.score;
         }
+        
+        const int staticEval = evaluate(pos);
 
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
         const Color us = pos.sideToMove();
+        const Color partner =
+            static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
+
+        const bool partnerInCheck = pos.inCheck(partner);
+        
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
         // Null Move Pruning (NMP): if the current player can effectively pass
@@ -453,23 +463,23 @@ namespace ironphoenix {
             && !pvNode
             && ply > 0
             && depth >= NULL_MOVE_MIN_DEPTH
+            && staticEval >= beta
             && !inCheckNode
+            && !partnerInCheck
             && !mateWindow
             && hasNonPawnMaterial(pos, us)) {
 
-            const int staticEval = evaluate(pos);
             if (staticEval >= beta) {
                 StateInfo nullState;
                 pos.makeNullMove(nullState);
                 searchStack_[ply + 1] = HistoryContext{};
 
-                const int reduction = NULL_MOVE_BASE_REDUCTION
-                    + depth / NULL_MOVE_DEPTH_DIVISOR;
-                const int nullDepth = std::max(0, depth - 1 - reduction);
-
+				// Dynamic null-move reduction: reduce the depth more aggressively
+                // at deeper nodes and for higher static evaluations.
+                const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / 190);
                 const int nullScore = -negamax(
                     pos,
-                    nullDepth,
+                    depth - reduction,
                     -beta,
                     -beta + 1,
                     ply + 1,
