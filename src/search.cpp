@@ -20,6 +20,9 @@ namespace ironphoenix {
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
+        constexpr int FUTILITY_MAX_DEPTH = 2;
+        constexpr int FUTILITY_MARGIN_PER_DEPTH = 200;
+        constexpr int TT_MATE_THRESHOLD = 29'000;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -32,6 +35,29 @@ namespace ironphoenix {
                 | pos.pieces(c, ROOK)
                 | pos.pieces(c, QUEEN);
             return static_cast<bool>(pieces);
+        }
+
+        IRONPHOENIX_FORCE_INLINE int futilityMargin(int depth) noexcept {
+            return FUTILITY_MARGIN_PER_DEPTH * depth;
+        }
+
+        IRONPHOENIX_FORCE_INLINE int ttImprovedEval(int staticEval, bool ttHit, const TTProbe& ttProbe) noexcept {
+            if (staticEval == TT_EVAL_NONE || !ttHit)
+                return staticEval;
+
+            // Search scores in the mate range are distance-dependent and should
+            // never replace a static evaluation used by pruning heuristics.
+            if (ttProbe.score <= -TT_MATE_THRESHOLD || ttProbe.score >= TT_MATE_THRESHOLD)
+                return staticEval;
+
+            if (ttProbe.bound == TTBound::Exact)
+                return ttProbe.score;
+            if (ttProbe.bound == TTBound::Lower && ttProbe.score > staticEval)
+                return ttProbe.score;
+            if (ttProbe.bound == TTBound::Upper && ttProbe.score < staticEval)
+                return ttProbe.score;
+
+            return staticEval;
         }
 
     }
@@ -291,14 +317,18 @@ namespace ironphoenix {
                 return ttProbe.score;
         }
 
+        int staticEval = TT_EVAL_NONE;
         int bestScore = -INF;
         Move bestMove{};
 
         if (!inCheckNode) {
-            bestScore = evaluate(pos);
+            staticEval = ttHit && ttProbe.eval != TT_EVAL_NONE
+                ? ttProbe.eval
+                : evaluate(pos);
+            bestScore = staticEval;
 
             if (bestScore >= beta) {
-                tt_.store(pos.key(), 0, bestScore, TTBound::Lower, Move{}, pvNode, ply);
+                tt_.store(pos.key(), 0, bestScore, staticEval, TTBound::Lower, Move{}, pvNode, ply);
                 return bestScore;
             }
 
@@ -375,7 +405,7 @@ namespace ironphoenix {
                 pvLength_[ply] = std::max(ply + 1, pvLength_[ply + 1]);
 
                 if (alpha >= beta) {
-                    tt_.store(pos.key(), 0, bestScore, TTBound::Lower, bestMove, pvNode, ply);
+                    tt_.store(pos.key(), 0, bestScore, staticEval, TTBound::Lower, bestMove, pvNode, ply);
                     return bestScore;
                 }
             }
@@ -386,12 +416,14 @@ namespace ironphoenix {
 
         if (inCheckNode && legalMoves == 0) {
             const int mateScore = -MATE_SCORE + ply;
-            tt_.store(pos.key(), 0, mateScore, TTBound::Exact, Move{}, pvNode, ply);
+            tt_.store(pos.key(), 0, mateScore, TT_EVAL_NONE, TTBound::Exact, Move{}, pvNode, ply);
             return mateScore;
         }
 
-        if (bestScore == -INF)
-            bestScore = evaluate(pos);
+        if (bestScore == -INF) {
+            staticEval = evaluate(pos);
+            bestScore = staticEval;
+        }
 
         TTBound bound = TTBound::Exact;
         if (bestScore <= originalAlpha)
@@ -399,7 +431,7 @@ namespace ironphoenix {
         else if (bestScore >= beta)
             bound = TTBound::Lower;
 
-        tt_.store(pos.key(), 0, bestScore, bound, bestMove, pvNode, ply);
+        tt_.store(pos.key(), 0, bestScore, staticEval, bound, bestMove, pvNode, ply);
         return bestScore;
     }
 
@@ -429,11 +461,11 @@ namespace ironphoenix {
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
         const Move ttMove = ttHit ? ttProbe.move : Move{};
 
-		// Transposition Table (TT) Cutoffs: if the current position has been
-		// previously searched at a depth equal to or greater than the current
-		// depth, and the stored score is sufficient to cause a cutoff, return
-		// the stored score. This is only done at non-PV nodes, since PV nodes
-		// require a full search to find the best move.
+        // Transposition Table (TT) Cutoffs: if the current position has been
+        // previously searched at a depth equal to or greater than the current
+        // depth, and the stored score is sufficient to cause a cutoff, return
+        // the stored score. This is only done at non-PV nodes, since PV nodes
+        // require a full search to find the best move.
         if (!pvNode && ply > 0 && ttHit && ttProbe.depth >= depth) {
             if (ttProbe.bound == TTBound::Exact)
                 return ttProbe.score;
@@ -442,8 +474,11 @@ namespace ironphoenix {
             if (ttProbe.bound == TTBound::Upper && ttProbe.score <= alpha)
                 return ttProbe.score;
         }
-        
-        const int staticEval = evaluate(pos);
+
+        int staticEval = ttHit && ttProbe.eval != TT_EVAL_NONE
+            ? ttProbe.eval
+            : evaluate(pos);
+        const int eval = ttImprovedEval(staticEval, ttHit, ttProbe);
 
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
@@ -452,19 +487,18 @@ namespace ironphoenix {
             static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
 
         const bool partnerInCheck = pos.inCheck(partner);
-        
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
         // Null Move Pruning (NMP): if the current player can effectively pass
         // and the opposing team still cannot push the score below beta, normal
         // moves are very likely to cause the same fail-high. Keep this away
         // from PV nodes, checks, mate windows, pawn-only zugzwang positions,
-        // and consecutive null moves.
+        // partner-check positions, and consecutive null moves.
         if (allowNull
             && !pvNode
             && ply > 0
             && depth >= NULL_MOVE_MIN_DEPTH
-            && staticEval >= beta
+            && eval >= beta
             && !inCheckNode
             && !partnerInCheck
             && !mateWindow
@@ -473,10 +507,11 @@ namespace ironphoenix {
             StateInfo nullState;
             pos.makeNullMove(nullState);
             searchStack_[ply + 1] = HistoryContext{};
-            
-		    // Dynamic null-move reduction: reduce the depth more aggressively
-            // at deeper nodes and for higher static evaluations.
-            const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / NULL_MOVE_DIVISOR);
+
+            // Dynamic null-move reduction: reduce the depth more aggressively
+            // at deeper nodes and for higher pruning evaluations.
+            const int reduction = 4 + depth / 5
+                + std::min(3, (eval - beta) / NULL_MOVE_DIVISOR);
             const int nullScore = -negamax(
                 pos,
                 depth - reduction,
@@ -486,12 +521,12 @@ namespace ironphoenix {
                 false,
                 false
             );
-            
+
             pos.undoNullMove(nullState);
-            
+
             if (shouldStop())
                 return 0;
-            
+
             // Never manufacture a mate score from a synthetic pass.
             if (nullScore >= beta && nullScore < MATE_THRESHOLD)
                 return nullScore;
@@ -523,7 +558,7 @@ namespace ironphoenix {
             bool legal = true;
 
             const bool quiet = !move.isCapture() && !move.isPromotion();
-            const int mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
+            const bool moveMateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
             // Late Move Pruning (LMP): at non-PV nodes, stop spending search
@@ -536,15 +571,31 @@ namespace ironphoenix {
                 && quiet
                 && move != ttMove
                 && !givesCheckMove
-                && !mateWindow
+                && !moveMateWindow
                 && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
                 continue;
             }
 
-			// Static Exchange Evaluation (SEE) Pruning: at non-PV nodes, if a quiet
-			// capture move is likely to lose material, skip it. This is only done at
-			// shallow depths, since SEE is not always accurate in complex positions.
-			// SEE pruning is not applied to TT moves, promotions, checks, or mate-window searches.
+            // Futility Pruning: at shallow non-PV nodes, skip quiet moves when
+            // even the TT-improved node evaluation plus a depth-scaled margin
+            // cannot raise alpha. Keep the first legal move searchable so the
+            // node cannot be turned into a false mate or stalemate.
+            if (!pvNode
+                && !inCheckNode
+                && depth <= FUTILITY_MAX_DEPTH
+                && legalMoves > 0
+                && quiet
+                && move != ttMove
+                && !givesCheckMove
+                && !moveMateWindow
+                && eval + futilityMargin(depth) <= alpha) {
+                continue;
+            }
+
+            // Static Exchange Evaluation (SEE) Pruning: at non-PV nodes, if a
+            // capture move is likely to lose material, skip it. This is only done
+            // at shallow depths, since SEE is not always accurate in complex positions.
+            // SEE pruning is not applied to TT moves, promotions, checks, or mate-window searches.
             if (!pvNode
                 && !inCheckNode
                 && depth <= tuning.seePruneMaxDepth
@@ -553,7 +604,7 @@ namespace ironphoenix {
                 && !move.isPromotion()
                 && move != ttMove
                 && !givesCheckMove
-                && !mateWindow) {
+                && !moveMateWindow) {
                 const int seeThreshold = -tuning.seePruneMarginPerDepth * depth;
                 if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
                     continue;
@@ -668,7 +719,7 @@ namespace ironphoenix {
         else if (bestScore >= beta)
             bound = TTBound::Lower;
 
-        tt_.store(pos.key(), depth, bestScore, bound, bestMove, pvNode, ply);
+        tt_.store(pos.key(), depth, bestScore, staticEval, bound, bestMove, pvNode, ply);
         return bestScore;
     }
 

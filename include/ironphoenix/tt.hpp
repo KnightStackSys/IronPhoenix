@@ -8,6 +8,8 @@
 
 namespace ironphoenix {
 
+inline constexpr int TT_EVAL_NONE = -32768;
+
 enum class TTBound : std::uint8_t {
     None  = 0,
     Upper = 1,
@@ -19,6 +21,7 @@ struct TTProbe {
     bool hit = false;
     Move move{};
     int score = 0;
+    int eval = TT_EVAL_NONE;
     int depth = -1;
     TTBound bound = TTBound::None;
     bool pvNode = false;
@@ -36,6 +39,7 @@ public:
     void store(Key key,
                int depth,
                int score,
+               int staticEval,
                TTBound bound,
                Move bestMove,
                bool pvNode,
@@ -46,9 +50,10 @@ public:
 
 private:
     struct Entry {
-        Key key = 0;
+        std::uint32_t key = 0;
         std::uint32_t move = 0;
         std::int16_t score = 0;
+        std::int16_t eval = TT_EVAL_NONE;
         std::int8_t depth = -1;
         std::uint8_t flags = 0;
     };
