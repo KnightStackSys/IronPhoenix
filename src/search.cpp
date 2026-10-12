@@ -19,6 +19,7 @@ namespace ironphoenix {
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
+        constexpr int NULL_MOVE_DIVISOR = 190;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -475,7 +476,7 @@ namespace ironphoenix {
             
 		    // Dynamic null-move reduction: reduce the depth more aggressively
             // at deeper nodes and for higher static evaluations.
-            const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / 190);
+            const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / NULL_MOVE_DIVISOR);
             const int nullScore = -negamax(
                 pos,
                 depth - reduction,
@@ -540,6 +541,10 @@ namespace ironphoenix {
                 continue;
             }
 
+			// Static Exchange Evaluation (SEE) Pruning: at non-PV nodes, if a quiet
+			// capture move is likely to lose material, skip it. This is only done at
+			// shallow depths, since SEE is not always accurate in complex positions.
+			// SEE pruning is not applied to TT moves, promotions, checks, or mate-window searches.
             if (!pvNode
                 && !inCheckNode
                 && depth <= tuning.seePruneMaxDepth
