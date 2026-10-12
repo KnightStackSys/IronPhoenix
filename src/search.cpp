@@ -20,6 +20,8 @@ namespace ironphoenix {
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
+        constexpr int FUTILITY_MAX_DEPTH = 2;
+        constexpr int FUTILITY_MARGIN_PER_DEPTH = 200;
         constexpr int TT_MATE_THRESHOLD = 29'000;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
@@ -33,6 +35,10 @@ namespace ironphoenix {
                 | pos.pieces(c, ROOK)
                 | pos.pieces(c, QUEEN);
             return static_cast<bool>(pieces);
+        }
+
+        IRONPHOENIX_FORCE_INLINE int futilityMargin(int depth) noexcept {
+            return FUTILITY_MARGIN_PER_DEPTH * depth;
         }
 
         IRONPHOENIX_FORCE_INLINE int ttImprovedEval(int staticEval, bool ttHit, const TTProbe& ttProbe) noexcept {
@@ -567,6 +573,22 @@ namespace ironphoenix {
                 && !givesCheckMove
                 && !moveMateWindow
                 && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
+                continue;
+            }
+
+            // Futility Pruning: at shallow non-PV nodes, skip quiet moves when
+            // even the TT-improved node evaluation plus a depth-scaled margin
+            // cannot raise alpha. Keep the first legal move searchable so the
+            // node cannot be turned into a false mate or stalemate.
+            if (!pvNode
+                && !inCheckNode
+                && depth <= FUTILITY_MAX_DEPTH
+                && legalMoves > 0
+                && quiet
+                && move != ttMove
+                && !givesCheckMove
+                && !moveMateWindow
+                && eval + futilityMargin(depth) <= alpha) {
                 continue;
             }
 
