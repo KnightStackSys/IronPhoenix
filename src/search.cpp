@@ -21,6 +21,7 @@ namespace ironphoenix {
         constexpr int NULL_MOVE_MIN_DEPTH = 4;
         constexpr int NULL_MOVE_BASE_REDUCTION = 2;
         constexpr int NULL_MOVE_DEPTH_DIVISOR = 4;
+        constexpr int TT_MATE_THRESHOLD = 29'000;
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
@@ -41,7 +42,7 @@ namespace ironphoenix {
 
             // Search scores in the mate range are distance-dependent and should
             // never replace a static evaluation used by pruning heuristics.
-            if (ttProbe.score <= -MATE_THRESHOLD || ttProbe.score >= MATE_THRESHOLD)
+            if (ttProbe.score <= -TT_MATE_THRESHOLD || ttProbe.score >= TT_MATE_THRESHOLD)
                 return staticEval;
 
             if (ttProbe.bound == TTBound::Exact)
@@ -547,7 +548,7 @@ namespace ironphoenix {
             bool legal = true;
 
             const bool quiet = !move.isCapture() && !move.isPromotion();
-            const int mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
+            const int moveMateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
             // Late Move Pruning (LMP): at non-PV nodes, stop spending search
@@ -560,7 +561,7 @@ namespace ironphoenix {
                 && quiet
                 && move != ttMove
                 && !givesCheckMove
-                && !mateWindow
+                && !moveMateWindow
                 && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
                 continue;
             }
@@ -573,7 +574,7 @@ namespace ironphoenix {
                 && !move.isPromotion()
                 && move != ttMove
                 && !givesCheckMove
-                && !mateWindow) {
+                && !moveMateWindow) {
                 const int seeThreshold = -tuning.seePruneMarginPerDepth * depth;
                 if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
                     continue;
