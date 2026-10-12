@@ -64,6 +64,7 @@ namespace ironphoenix {
         static constexpr int INF = 32000;
         static constexpr int MATE_SCORE = 30000;
         static constexpr int MATE_THRESHOLD = 29000;
+        static constexpr std::uint64_t TIME_CHECK_NODE_INTERVAL = 1024;
 
         TranspositionTable tt_{ 64 };
         HistoryTables history_{};
@@ -75,6 +76,7 @@ namespace ironphoenix {
         std::chrono::steady_clock::time_point startTime_{};
         std::int64_t timeBudgetMs_ = 0;
         std::uint64_t nodes_ = 0;
+        std::uint64_t nextTimeCheckNode_ = 0;
         int selDepth_ = 0;
 
         std::array<std::array<Move, MAX_PLY>, MAX_PLY> pv_{};
