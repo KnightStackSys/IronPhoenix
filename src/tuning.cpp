@@ -60,11 +60,11 @@ namespace ironphoenix::Tuning {
                 || name == "EvalRookMobility"
                 || name == "EvalQueenMobility"
                 || name == "EvalBishopPairBonus"
-                || name == "EvalPawnAdvanceBonus"
                 || name == "EvalSupportedPawnBonus"
                 || name == "EvalKingPawnShieldBonus"
                 || name == "EvalCheckPenalty"
-                || name == "EvalKnightCentralization"
+                || name == "EvalKingZoneAttackPenalty"
+                || name == "EvalPartnerSupportBonus"
                 || name == "EvalTempoBonus";
         }
 
@@ -164,16 +164,16 @@ namespace ironphoenix::Tuning {
             p.queenMobility = value;
         else if (name == "EvalBishopPairBonus" && inRange(value, -500, 500))
             p.bishopPairBonus = value;
-        else if (name == "EvalPawnAdvanceBonus" && inRange(value, -100, 100))
-            p.pawnAdvanceBonus = value;
         else if (name == "EvalSupportedPawnBonus" && inRange(value, -200, 200))
             p.supportedPawnBonus = value;
         else if (name == "EvalKingPawnShieldBonus" && inRange(value, -200, 200))
             p.kingPawnShieldBonus = value;
         else if (name == "EvalCheckPenalty" && inRange(value, 0, 1000))
             p.checkPenalty = value;
-        else if (name == "EvalKnightCentralization" && inRange(value, -100, 100))
-            p.knightCentralization = value;
+        else if (name == "EvalKingZoneAttackPenalty" && inRange(value, 0, 200))
+            p.kingZoneAttackPenalty = value;
+        else if (name == "EvalPartnerSupportBonus" && inRange(value, -200, 200))
+            p.partnerSupportBonus = value;
         else if (name == "EvalTempoBonus" && inRange(value, -500, 500))
             p.tempoBonus = value;
         else
@@ -250,11 +250,11 @@ namespace ironphoenix::Tuning {
             << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
             << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
             << "option name EvalBishopPairBonus type spin default 30 min -500 max 500\n"
-            << "option name EvalPawnAdvanceBonus type spin default 4 min -100 max 100\n"
             << "option name EvalSupportedPawnBonus type spin default 6 min -200 max 200\n"
             << "option name EvalKingPawnShieldBonus type spin default 6 min -200 max 200\n"
             << "option name EvalCheckPenalty type spin default 40 min 0 max 1000\n"
-            << "option name EvalKnightCentralization type spin default 3 min -100 max 100\n"
+            << "option name EvalKingZoneAttackPenalty type spin default 5 min 0 max 200\n"
+            << "option name EvalPartnerSupportBonus type spin default 4 min -200 max 200\n"
             << "option name EvalTempoBonus type spin default 8 min -500 max 500\n"
             << "option name ResetTuning type button\n";
     }
@@ -286,11 +286,11 @@ namespace ironphoenix::Tuning {
             << " EvalRookMobility=" << e.rookMobility
             << " EvalQueenMobility=" << e.queenMobility
             << " EvalBishopPairBonus=" << e.bishopPairBonus
-            << " EvalPawnAdvanceBonus=" << e.pawnAdvanceBonus
             << " EvalSupportedPawnBonus=" << e.supportedPawnBonus
             << " EvalKingPawnShieldBonus=" << e.kingPawnShieldBonus
             << " EvalCheckPenalty=" << e.checkPenalty
-            << " EvalKnightCentralization=" << e.knightCentralization
+            << " EvalKingZoneAttackPenalty=" << e.kingZoneAttackPenalty
+            << " EvalPartnerSupportBonus=" << e.partnerSupportBonus
             << " EvalTempoBonus=" << e.tempoBonus << '\n';
     }
 
