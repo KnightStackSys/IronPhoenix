@@ -21,6 +21,20 @@ static Bitboard naiveRay(Square s, Direction d, Bitboard occ) {
     return out;
 }
 
+static void verifyLineAttacks(const Position& p, std::mt19937_64& rng) {
+    const Bitboard occ = p.occupancy();
+
+    // Sample several squares per randomized position. This directly checks the
+    // compact line representation against the original arbitrary-occupancy ray
+    // implementation, including cross-board diagonal holes.
+    for (int sample = 0; sample < 16; ++sample) {
+        const Square sq = static_cast<Square>(rng() % SQUARE_NB);
+        assert(p.rookAttacks(sq) == Geometry::rookAttacks(sq, occ));
+        assert(p.bishopAttacks(sq) == Geometry::bishopAttacks(sq, occ));
+        assert(p.queenAttacks(sq) == Geometry::queenAttacks(sq, occ));
+    }
+}
+
 int main() {
     Geometry::init();
     std::mt19937_64 rng(0x4E45585553425043ULL);
@@ -72,6 +86,8 @@ int main() {
         p.setRulesetId(static_cast<std::uint8_t>(rng() & 0xFULL));
         p.finalizeSetup();
         assert(p.key() == p.recomputeKey());
+        assert(p.verify());
+        verifyLineAttacks(p, rng);
 
         // Null move must advance exactly one 4PC turn and then restore the
         // position byte-for-byte from the searcher's point of view.
@@ -82,12 +98,15 @@ int main() {
         p.makeNullMove(nullState);
         assert(p.sideToMove() == nextColor(beforeNullSide));
         assert(p.key() == p.recomputeKey());
+        assert(p.verify());
+        verifyLineAttacks(p, rng);
         p.undoNullMove(nullState);
         assert(p.sideToMove() == beforeNullSide);
         assert(p.checkers() == beforeNullCheckers);
         assert(p.key() == beforeNull);
         assert(p.key() == p.recomputeKey());
         assert(p.verify());
+        verifyLineAttacks(p, rng);
 
         Bitboard movers = p.occupancy(stm);
         if (!movers)
@@ -106,10 +125,13 @@ int main() {
         Move m(from, to);
         p.makeMove(m, st);
         assert(p.key() == p.recomputeKey());
+        assert(p.verify());
+        verifyLineAttacks(p, rng);
         p.undoMove(m, st);
         assert(p.key() == before);
         assert(p.key() == p.recomputeKey());
         assert(p.verify());
+        verifyLineAttacks(p, rng);
     }
 
     std::cout << "iron_phoenix property tests: PASS\n";
