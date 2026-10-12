@@ -35,6 +35,25 @@ namespace ironphoenix {
             return static_cast<bool>(pieces);
         }
 
+        IRONPHOENIX_FORCE_INLINE int ttImprovedEval(int staticEval, bool ttHit, const TTProbe& ttProbe) noexcept {
+            if (staticEval == TT_EVAL_NONE || !ttHit)
+                return staticEval;
+
+            // Search scores in the mate range are distance-dependent and should
+            // never replace a static evaluation used by pruning heuristics.
+            if (ttProbe.score <= -MATE_THRESHOLD || ttProbe.score >= MATE_THRESHOLD)
+                return staticEval;
+
+            if (ttProbe.bound == TTBound::Exact)
+                return ttProbe.score;
+            if (ttProbe.bound == TTBound::Lower && ttProbe.score > staticEval)
+                return ttProbe.score;
+            if (ttProbe.bound == TTBound::Upper && ttProbe.score < staticEval)
+                return ttProbe.score;
+
+            return staticEval;
+        }
+
     }
 
     SearchEngine::SearchEngine() = default;
@@ -292,14 +311,18 @@ namespace ironphoenix {
                 return ttProbe.score;
         }
 
+        int staticEval = TT_EVAL_NONE;
         int bestScore = -INF;
         Move bestMove{};
 
         if (!inCheckNode) {
-            bestScore = evaluate(pos);
+            staticEval = ttHit && ttProbe.eval != TT_EVAL_NONE
+                ? ttProbe.eval
+                : evaluate(pos);
+            bestScore = staticEval;
 
             if (bestScore >= beta) {
-                tt_.store(pos.key(), 0, bestScore, TTBound::Lower, Move{}, pvNode, ply);
+                tt_.store(pos.key(), 0, bestScore, staticEval, TTBound::Lower, Move{}, pvNode, ply);
                 return bestScore;
             }
 
@@ -376,7 +399,7 @@ namespace ironphoenix {
                 pvLength_[ply] = std::max(ply + 1, pvLength_[ply + 1]);
 
                 if (alpha >= beta) {
-                    tt_.store(pos.key(), 0, bestScore, TTBound::Lower, bestMove, pvNode, ply);
+                    tt_.store(pos.key(), 0, bestScore, staticEval, TTBound::Lower, bestMove, pvNode, ply);
                     return bestScore;
                 }
             }
@@ -387,12 +410,14 @@ namespace ironphoenix {
 
         if (inCheckNode && legalMoves == 0) {
             const int mateScore = -MATE_SCORE + ply;
-            tt_.store(pos.key(), 0, mateScore, TTBound::Exact, Move{}, pvNode, ply);
+            tt_.store(pos.key(), 0, mateScore, TT_EVAL_NONE, TTBound::Exact, Move{}, pvNode, ply);
             return mateScore;
         }
 
-        if (bestScore == -INF)
-            bestScore = evaluate(pos);
+        if (bestScore == -INF) {
+            staticEval = evaluate(pos);
+            bestScore = staticEval;
+        }
 
         TTBound bound = TTBound::Exact;
         if (bestScore <= originalAlpha)
@@ -400,7 +425,7 @@ namespace ironphoenix {
         else if (bestScore >= beta)
             bound = TTBound::Lower;
 
-        tt_.store(pos.key(), 0, bestScore, bound, bestMove, pvNode, ply);
+        tt_.store(pos.key(), 0, bestScore, staticEval, bound, bestMove, pvNode, ply);
         return bestScore;
     }
 
@@ -444,6 +469,11 @@ namespace ironphoenix {
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
+        // Reuse the raw static evaluation saved in the TT when available. Keep
+        // this separate from the searched TT score: the latter is only allowed
+        // to improve pruning decisions when its bound supports that direction.
+        int staticEval = ttHit ? ttProbe.eval : TT_EVAL_NONE;
+
         // Null Move Pruning (NMP): if the current player can effectively pass
         // and the opposing team still cannot push the score below beta, normal
         // moves are very likely to cause the same fail-high. Keep this away
@@ -457,8 +487,11 @@ namespace ironphoenix {
             && !mateWindow
             && hasNonPawnMaterial(pos, us)) {
 
-            const int staticEval = evaluate(pos);
-            if (staticEval >= beta) {
+            if (staticEval == TT_EVAL_NONE)
+                staticEval = evaluate(pos);
+
+            const int eval = ttImprovedEval(staticEval, ttHit, ttProbe);
+            if (eval >= beta) {
                 StateInfo nullState;
                 pos.makeNullMove(nullState);
                 searchStack_[ply + 1] = HistoryContext{};
@@ -655,7 +688,7 @@ namespace ironphoenix {
         else if (bestScore >= beta)
             bound = TTBound::Lower;
 
-        tt_.store(pos.key(), depth, bestScore, bound, bestMove, pvNode, ply);
+        tt_.store(pos.key(), depth, bestScore, staticEval, bound, bestMove, pvNode, ply);
         return bestScore;
     }
 
