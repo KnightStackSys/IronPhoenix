@@ -6,6 +6,7 @@
 #include "ironphoenix/tuning.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 
 namespace ironphoenix::Eval {
 
