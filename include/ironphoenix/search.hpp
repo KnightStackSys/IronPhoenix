@@ -87,7 +87,10 @@ namespace ironphoenix {
         void run(Position position, std::ostream& out);
         void runMultiPV(Position position, int multiPV, std::ostream& out);
 
-        int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull = true);
+        // cutNode marks a non-PV node expected to fail high. allNode is derived
+        // inside negamax as the complementary non-PV node type.
+        int negamax(Position& pos, int depth, int alpha, int beta, int ply,
+            bool pvNode, bool allowNull = true, bool cutNode = false);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
         int moveScore(const Position& pos, Move move, Move ttMove, int ply, bool givesCheck) const noexcept;
