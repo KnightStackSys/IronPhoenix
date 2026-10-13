@@ -24,6 +24,10 @@ namespace ironphoenix {
         constexpr int HISTORY_MOVE_PRUNE_MAX_DEPTH = 4;
         constexpr int HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH = 1'500;
 
+        // Post-LMR continuation history: reward a reduced quiet move that proves
+        // strong enough to beat alpha and require a full-depth re-search.
+        constexpr int POST_LMR_CONTINUATION_BONUS = 1'334;
+
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
@@ -716,8 +720,32 @@ namespace ironphoenix {
                             const int reducedDepth = depth - 1 - reduction;
                             score = -negamax(pos, reducedDepth, -alpha - 1, -alpha, ply + 1, false);
 
-                            if (!shouldStop() && score > alpha)
+                            if (!shouldStop() && score > alpha) {
+                                // Post-LMR continuation-history update: the move was
+                                // reduced because it looked unpromising, but the
+                                // reduced search still beat alpha. Reward the
+                                // continuation contexts before the full-depth retry.
+                                if (ply > 0 && searchStack_[ply].valid()) {
+                                    history_.updateContinuation(
+                                        ContinuationKind::PreviousPly,
+                                        searchStack_[ply],
+                                        movingPiece,
+                                        move.to(),
+                                        POST_LMR_CONTINUATION_BONUS);
+                                }
+
+                                if (ply >= 4 && searchStack_[ply - 3].valid()
+                                    && searchStack_[ply - 3].mover == us) {
+                                    history_.updateContinuation(
+                                        ContinuationKind::SamePlayer,
+                                        searchStack_[ply - 3],
+                                        movingPiece,
+                                        move.to(),
+                                        (POST_LMR_CONTINUATION_BONUS * 3) / 4);
+                                }
+
                                 score = -negamax(pos, depth - 1, -alpha - 1, -alpha, ply + 1, false);
+                            }
                         }
                         else {
                             score = -negamax(pos, depth - 1, -alpha - 1, -alpha, ply + 1, false);
