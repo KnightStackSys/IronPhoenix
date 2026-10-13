@@ -515,21 +515,16 @@ namespace ironphoenix {
                 return ttProbe.score;
         }
 
+        const int staticEval = evaluate(pos);
+
         const bool inCheckNode = pos.inCheck();
         const auto& tuning = Tuning::search();
 
-        // Internal Iterative Reduction (IIR): keep this deliberately conservative
-        // in 4PC. Only reduce deep PV nodes when move ordering has no TT move to
-        // guide the search. Non-PV nodes retain their full depth.
-        if (pvNode
-            && ply > 0
-            && depth >= IIR_MIN_DEPTH
-            && !inCheckNode
-            && !ttMove) {
-            --depth;
-        }
-
         const Color us = pos.sideToMove();
+
+        const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
+        const bool partnerChecked = pos.inCheck(partner);
+
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
         // Null Move Pruning (NMP): keep expensive partner-check detection and
@@ -538,42 +533,49 @@ namespace ironphoenix {
             && !pvNode
             && ply > 0
             && depth >= NULL_MOVE_MIN_DEPTH
+            && staticEval >= beta
             && !inCheckNode
+            && !partnerChecked
             && !mateWindow
             && hasNonPawnMaterial(pos, us)) {
 
-            const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
-            if (!pos.inCheck(partner)) {
-                const int staticEval = evaluate(pos);
+            StateInfo nullState;
+            pos.makeNullMove(nullState);
+            searchStack_[ply + 1] = HistoryContext{};
+            
+            // Dynamic null-move reduction: reduce the depth more aggressively
+            // at deeper nodes and for higher static evaluations.
+            const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / NULL_MOVE_DIVISOR);
+            const int nullScore = -negamax(
+                pos,
+                depth - reduction,
+                -beta,
+                -beta + 1,
+                ply + 1,
+                false,
+                false
+            );
+            
+            pos.undoNullMove(nullState);
+            
+            if (shouldStop())
+                return 0;
+            
+            // Never manufacture a mate score from a synthetic pass.
+            if (nullScore >= beta && nullScore < MATE_THRESHOLD)
+                return nullScore;
+        }
 
-                if (staticEval >= beta) {
-                    StateInfo nullState;
-                    pos.makeNullMove(nullState);
-                    searchStack_[ply + 1] = HistoryContext{};
-
-                    // Dynamic null-move reduction: reduce the depth more aggressively
-                    // at deeper nodes and for higher static evaluations.
-                    const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / NULL_MOVE_DIVISOR);
-                    const int nullScore = -negamax(
-                        pos,
-                        depth - reduction,
-                        -beta,
-                        -beta + 1,
-                        ply + 1,
-                        false,
-                        false
-                    );
-
-                    pos.undoNullMove(nullState);
-
-                    if (shouldStop())
-                        return 0;
-
-                    // Never manufacture a mate score from a synthetic pass.
-                    if (nullScore >= beta && nullScore < MATE_THRESHOLD)
-                        return nullScore;
-                }
-            }
+        // Internal Iterative Reduction (IIR): keep this deliberately conservative
+        // in 4PC. Only reduce deep PV nodes when move ordering has no TT move to
+        // guide the search. Non-PV nodes retain their full depth.
+        if (pvNode
+            && ply > 0
+            && depth >= IIR_MIN_DEPTH
+            && !inCheckNode
+            && !partnerChecked
+            && !ttMove) {
+            depth -= 1;
         }
 
         MoveList moves;
