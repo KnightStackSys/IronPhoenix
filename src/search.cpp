@@ -475,7 +475,8 @@ namespace ironphoenix {
         return bestScore;
     }
 
-    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull) {
+    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply,
+        bool pvNode, bool allowNull, bool cutNode) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
@@ -483,6 +484,11 @@ namespace ironphoenix {
 
         if (depth <= 0)
             return qsearch(pos, alpha, beta, ply, pvNode);
+
+        // Node-type classification. PV nodes are never cut nodes. A non-PV node
+        // that is not expected to fail high is an all node.
+        cutNode = !pvNode && cutNode;
+        const bool allNode = !pvNode && !cutNode;
 
         ++nodes_;
         selDepth_ = std::max(selDepth_, ply);
@@ -553,6 +559,7 @@ namespace ironphoenix {
                 -beta + 1,
                 ply + 1,
                 false,
+                false,
                 false
             );
             
@@ -596,7 +603,7 @@ namespace ironphoenix {
                 givesCheckBits.data());
         }
         else {
-            // At cut nodes avoid sorting the entire move list and avoid eager
+            // At non-PV nodes avoid sorting the entire move list and avoid eager
             // givesCheck() calls. Score cheaply, then select the best few moves
             // only as they are actually requested by the search loop.
             for (std::size_t i = 0; i < moves.size; ++i)
@@ -712,7 +719,19 @@ namespace ironphoenix {
 
                     ++legalMoves;
                     if (legalMoves == 1) {
-                        score = -negamax(pos, depth - 1, -beta, -alpha, ply + 1, pvNode);
+                        // PV nodes keep a PV child. For non-PV nodes, an all node
+                        // expects its first child to be a cut node, while a cut node
+                        // expects its first child to be an all node.
+                        score = -negamax(
+                            pos,
+                            depth - 1,
+                            -beta,
+                            -alpha,
+                            ply + 1,
+                            pvNode,
+                            true,
+                            allNode
+                        );
                     }
                     else {
 
@@ -728,19 +747,58 @@ namespace ironphoenix {
                             reduction = std::clamp(reduction, 0, depth - 2);
                         }
 
+                        // PVS scout searches are cut nodes: from the child point of
+                        // view we expect a fail-high against the null window when the
+                        // move is not good enough to raise the parent's alpha.
                         if (reduction > 0) {
                             const int reducedDepth = depth - 1 - reduction;
-                            score = -negamax(pos, reducedDepth, -alpha - 1, -alpha, ply + 1, false);
+                            score = -negamax(
+                                pos,
+                                reducedDepth,
+                                -alpha - 1,
+                                -alpha,
+                                ply + 1,
+                                false,
+                                true,
+                                true
+                            );
 
                             if (!shouldStop() && score > alpha)
-                                score = -negamax(pos, depth - 1, -alpha - 1, -alpha, ply + 1, false);
+                                score = -negamax(
+                                    pos,
+                                    depth - 1,
+                                    -alpha - 1,
+                                    -alpha,
+                                    ply + 1,
+                                    false,
+                                    true,
+                                    true
+                                );
                         }
                         else {
-                            score = -negamax(pos, depth - 1, -alpha - 1, -alpha, ply + 1, false);
+                            score = -negamax(
+                                pos,
+                                depth - 1,
+                                -alpha - 1,
+                                -alpha,
+                                ply + 1,
+                                false,
+                                true,
+                                true
+                            );
                         }
 
                         if (!shouldStop() && score > alpha && score < beta)
-                            score = -negamax(pos, depth - 1, -beta, -alpha, ply + 1, pvNode);
+                            score = -negamax(
+                                pos,
+                                depth - 1,
+                                -beta,
+                                -alpha,
+                                ply + 1,
+                                pvNode,
+                                true,
+                                false
+                            );
                     }
                 }
                 pos.undoMove(move, st);
