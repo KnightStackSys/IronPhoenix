@@ -18,11 +18,53 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
+        // History Move Pruning (HMP): only prune very poorly scoring quiet
+        // moves at shallow non-PV nodes. The threshold becomes more conservative
+        // with depth because deeper nodes deserve more tactical coverage.
+        constexpr int HISTORY_MOVE_PRUNE_MAX_DEPTH = 4;
+        constexpr int HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH = 1'500;
+
         constexpr int IIR_MIN_DEPTH = 6;
+
+        constexpr int NULL_MOVE_MIN_DEPTH = 2;
+        constexpr int NULL_MOVE_DIVISOR = 190;
+        constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
+
+        // Non-PV nodes normally cut off quickly. Selecting only the strongest
+        // prefix lazily avoids sorting the entire high-branching 4PC move list.
+        constexpr std::size_t LAZY_PICK_LIMIT = 16;
+
+        struct ScoredMove final {
+            int score;
+            Move move;
+            bool givesCheck;
+        };
 
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool hasNonPawnMaterial(const Position& pos, Color c) noexcept {
+            const Bitboard pieces = pos.pieces(c, KNIGHT)
+                | pos.pieces(c, BISHOP)
+                | pos.pieces(c, ROOK)
+                | pos.pieces(c, QUEEN);
+            return static_cast<bool>(pieces);
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool cachedGivesCheck(const std::uint64_t* bits, std::size_t index) noexcept {
+            return ((bits[index >> 6u] >> (index & 63u)) & 1ull) != 0;
+        }
+
+        IRONPHOENIX_FORCE_INLINE int captureOrderingScore(Piece movingPiece, Move move) noexcept {
+            // Full four-player SEE is expensive enough that using it on every
+            // generated capture purely for ordering costs substantial NPS.
+            // MVV/LVA gives us a cheap first-order tactical score; SEE is still
+            // used later by actual SEE pruning where its result affects search.
+            const int victim = pieceValue(move.captured());
+            const int attacker = pieceValue(movingPiece);
+            return victim * 128 - attacker * 8;
         }
 
     }
@@ -109,9 +151,15 @@ namespace ironphoenix {
             return true;
         }
 
-        if (timeBudgetMs_ > 0 && elapsedMs() >= timeBudgetMs_) {
-            stopRequested_.store(true, std::memory_order_relaxed);
-            return true;
+        // steady_clock::now() is surprisingly expensive when called several
+        // times per searched move. Poll the clock periodically by node count;
+        // explicit root checks still enforce the budget between iterations.
+        if (timeBudgetMs_ > 0 && nodes_ >= nextTimeCheckNode_) {
+            nextTimeCheckNode_ = nodes_ + TIME_CHECK_NODE_INTERVAL;
+            if (elapsedMs() >= timeBudgetMs_) {
+                stopRequested_.store(true, std::memory_order_relaxed);
+                return true;
+            }
         }
 
         return false;
@@ -126,10 +174,15 @@ namespace ironphoenix {
         return std::min(params.historyBonusMax, params.historyBonusScale * depth * depth);
     }
 
-    int SearchEngine::moveScore(const Position& pos, Move move, Move ttMove, int ply) const noexcept {
+    int SearchEngine::moveScore(const Position& pos,
+        Move move,
+        Move ttMove,
+        int ply,
+        bool givesCheck) const noexcept {
+
         if (move == ttMove)
             return 50'000'000;
-        if (isTerminalKingCapture(pos, move))
+        if (move.isCapture() && isTerminalKingCapture(pos, move))
             return 45'000'000;
 
         const auto& tuning = Tuning::search();
@@ -139,7 +192,7 @@ namespace ironphoenix {
         if (move.isPromotion()) {
             int score = 30'000'000 + pieceValue(promotedType(move.promotion())) * 128;
             if (move.isCapture()) {
-                score += std::clamp(see(pos, move), -5000, 5000) * 64;
+                score += captureOrderingScore(movingPiece, move);
                 score += history_.captureScore(mover, movingPiece, move) * 2;
             }
             return score;
@@ -147,7 +200,7 @@ namespace ironphoenix {
 
         if (move.isCapture()) {
             int score = 20'000'000;
-            score += std::clamp(see(pos, move), -5000, 5000) * 64;
+            score += captureOrderingScore(movingPiece, move);
             score += history_.captureScore(mover, movingPiece, move) * 2;
             return score;
         }
@@ -166,23 +219,56 @@ namespace ironphoenix {
             score += (history_.continuationScore(ContinuationKind::SamePlayer, searchStack_[ply - 3], movingPiece, move.to()) * 3) / 4;
         }
 
-        if (pos.givesCheck(move))
+        if (givesCheck)
             score += tuning.checkMoveBonus;
 
         return score;
     }
 
-    void SearchEngine::orderMoves(const Position& pos, Move* begin, Move* end, Move ttMove, int ply) const {
-        std::array<std::pair<int, Move>, MAX_MOVES> scored{};
+    void SearchEngine::orderMoves(const Position& pos,
+        Move* begin,
+        Move* end,
+        Move ttMove,
+        int ply,
+        int* orderedScores,
+        std::uint64_t* givesCheckBits) const {
+
+        // Do not value-initialize all 512 scratch entries at every node. Only
+        // the first count entries are written and subsequently read.
+        std::array<ScoredMove, MAX_MOVES> scored;
         const std::size_t count = static_cast<std::size_t>(end - begin);
-        for (std::size_t i = 0; i < count; ++i)
-            scored[i] = { moveScore(pos, begin[i], ttMove, ply), begin[i] };
+
+        for (std::size_t i = 0; i < count; ++i) {
+            const Move move = begin[i];
+            const bool terminal = move.isCapture() && isTerminalKingCapture(pos, move);
+
+            // Capture/promotion scores do not consume the check bonus, so avoid
+            // the expensive givesCheck() call unless the caller explicitly needs
+            // check metadata for pruning safety.
+            const bool needCheck = givesCheckBits != nullptr
+                || ((!move.isCapture() && !move.isPromotion()) && move != ttMove);
+            const bool givesCheck = !terminal && needCheck && pos.givesCheck(move);
+
+            scored[i].score = moveScore(pos, move, ttMove, ply, givesCheck);
+            scored[i].move = move;
+            scored[i].givesCheck = givesCheck;
+        }
 
         std::sort(scored.begin(), scored.begin() + count,
-            [](const auto& a, const auto& b) { return a.first > b.first; });
+            [](const ScoredMove& a, const ScoredMove& b) { return a.score > b.score; });
 
-        for (std::size_t i = 0; i < count; ++i)
-            begin[i] = scored[i].second;
+        if (givesCheckBits) {
+            for (std::size_t i = 0; i < CHECK_BIT_WORDS; ++i)
+                givesCheckBits[i] = 0;
+        }
+
+        for (std::size_t i = 0; i < count; ++i) {
+            begin[i] = scored[i].move;
+            if (orderedScores)
+                orderedScores[i] = scored[i].score;
+            if (givesCheckBits && scored[i].givesCheck)
+                givesCheckBits[i >> 6u] |= 1ull << (i & 63u);
+        }
     }
 
     void SearchEngine::updateQuietCutoff(const Position& pos,
@@ -257,6 +343,15 @@ namespace ironphoenix {
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
 
+        // Mate Distance Pruning (MDP): scores closer to +/-MATE_SCORE than the
+        // current ply can physically achieve are impossible. IronPhoenix scores
+        // an immediate terminal king capture as MATE_SCORE - (ply + 1), while a
+        // side already mated at this node scores -MATE_SCORE + ply.
+        alpha = std::max(alpha, -MATE_SCORE + ply);
+        beta = std::min(beta, MATE_SCORE - (ply + 1));
+        if (alpha >= beta)
+            return alpha;
+
         const int originalAlpha = alpha;
         const bool inCheckNode = pos.inCheck();
 
@@ -288,18 +383,14 @@ namespace ironphoenix {
                 alpha = bestScore;
         }
 
-        MoveList pseudo;
-        generatePseudoLegalMoves(pos, pseudo);
-
+        // In check, every evasion is relevant. Otherwise generate only captures,
+        // en-passant and promotions directly instead of generating/copying every
+        // quiet pseudo-legal move through a second 512-entry buffer.
         MoveList moves;
-        for (Move move : pseudo) {
-            if (inCheckNode
-                || move.isCapture()
-                || move.isPromotion()
-                || isTerminalKingCapture(pos, move)) {
-                moves.push(move);
-            }
-        }
+        if (inCheckNode)
+            generatePseudoLegalMoves(pos, moves);
+        else
+            generateTacticalMoves(pos, moves);
 
         orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
 
@@ -310,8 +401,7 @@ namespace ironphoenix {
             if (shouldStop())
                 break;
 
-            const bool terminalKingCapture = isTerminalKingCapture(pos, move);
-            const bool givesCheckMove = !terminalKingCapture && pos.givesCheck(move);
+            const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
 
             int score = -INF;
             bool legal = true;
@@ -385,7 +475,7 @@ namespace ironphoenix {
         return bestScore;
     }
 
-    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode) {
+    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
@@ -398,11 +488,24 @@ namespace ironphoenix {
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
 
+        // Mate Distance Pruning (MDP): tighten the search window to the best and
+        // worst mate scores that are still reachable from this ply. If the mate
+        // bounds collapse the window, the node cannot improve the caller's result.
+        alpha = std::max(alpha, -MATE_SCORE + ply);
+        beta = std::min(beta, MATE_SCORE - (ply + 1));
+        if (alpha >= beta)
+            return alpha;
+
         const int originalAlpha = alpha;
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
         const Move ttMove = ttHit ? ttProbe.move : Move{};
 
+        // Transposition Table (TT) Cutoffs: if the current position has been
+        // previously searched at a depth equal to or greater than the current
+        // depth, and the stored score is sufficient to cause a cutoff, return
+        // the stored score. This is only done at non-PV nodes, since PV nodes
+        // require a full search to find the best move.
         if (!pvNode && ply > 0 && ttHit && ttProbe.depth >= depth) {
             if (ttProbe.bound == TTBound::Exact)
                 return ttProbe.score;
@@ -426,34 +529,122 @@ namespace ironphoenix {
             --depth;
         }
 
+        const Color us = pos.sideToMove();
+        const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
+
+        // Null Move Pruning (NMP): keep expensive partner-check detection and
+        // static evaluation completely off nodes where NMP cannot run anyway.
+        if (allowNull
+            && !pvNode
+            && ply > 0
+            && depth >= NULL_MOVE_MIN_DEPTH
+            && !inCheckNode
+            && !mateWindow
+            && hasNonPawnMaterial(pos, us)) {
+
+            const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
+            if (!pos.inCheck(partner)) {
+                const int staticEval = evaluate(pos);
+
+                if (staticEval >= beta) {
+                    StateInfo nullState;
+                    pos.makeNullMove(nullState);
+                    searchStack_[ply + 1] = HistoryContext{};
+
+                    // Dynamic null-move reduction: reduce the depth more aggressively
+                    // at deeper nodes and for higher static evaluations.
+                    const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / NULL_MOVE_DIVISOR);
+                    const int nullScore = -negamax(
+                        pos,
+                        depth - reduction,
+                        -beta,
+                        -beta + 1,
+                        ply + 1,
+                        false,
+                        false
+                    );
+
+                    pos.undoNullMove(nullState);
+
+                    if (shouldStop())
+                        return 0;
+
+                    // Never manufacture a mate score from a synthetic pass.
+                    if (nullScore >= beta && nullScore < MATE_THRESHOLD)
+                        return nullScore;
+                }
+            }
+        }
+
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
-        orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
 
-        const Color us = pos.sideToMove();
+        std::array<int, MAX_MOVES> orderedScores;
+        std::array<std::uint64_t, CHECK_BIT_WORDS> givesCheckBits;
+
+        if (pvNode) {
+            // PV nodes are comparatively rare and benefit from complete ordering.
+            // Keep their existing full sort and cached check metadata.
+            orderMoves(pos,
+                moves.begin(),
+                moves.end(),
+                ttMove,
+                ply,
+                orderedScores.data(),
+                givesCheckBits.data());
+        }
+        else {
+            // At cut nodes avoid sorting the entire move list and avoid eager
+            // givesCheck() calls. Score cheaply, then select the best few moves
+            // only as they are actually requested by the search loop.
+            for (std::size_t i = 0; i < moves.size; ++i)
+                orderedScores[i] = moveScore(pos, moves.moves[i], ttMove, ply, false);
+        }
+
         int legalMoves = 0;
         int bestScore = -INF;
         Move bestMove{};
-        std::array<Move, MAX_MOVES> failedQuiets{};
-        std::array<Move, MAX_MOVES> failedCaptures{};
+
+        // Quiet failures grow from the front and capture failures from the back,
+        // replacing two 512-Move arrays with one without changing history updates.
+        std::array<Move, MAX_MOVES> failedMoves;
         std::size_t failedQuietCount = 0;
         std::size_t failedCaptureCount = 0;
 
-        for (Move move : moves) {
+        for (std::size_t moveIndex = 0; moveIndex < moves.size; ++moveIndex) {
             if (shouldStop())
                 break;
 
+            if (!pvNode && moveIndex < LAZY_PICK_LIMIT) {
+                std::size_t bestIndex = moveIndex;
+                int bestOrderScore = orderedScores[moveIndex];
+
+                for (std::size_t j = moveIndex + 1; j < moves.size; ++j) {
+                    if (orderedScores[j] > bestOrderScore) {
+                        bestOrderScore = orderedScores[j];
+                        bestIndex = j;
+                    }
+                }
+
+                if (bestIndex != moveIndex) {
+                    std::swap(moves.moves[moveIndex], moves.moves[bestIndex]);
+                    std::swap(orderedScores[moveIndex], orderedScores[bestIndex]);
+                }
+            }
+
+            const Move move = moves.moves[moveIndex];
             const Piece movingPiece = pos.pieceAt(move.from());
-            const bool terminalKingCapture = isTerminalKingCapture(pos, move);
-            const bool givesCheckMove = !terminalKingCapture && pos.givesCheck(move);
-            const int lmrHistoryScore = (!move.isCapture() && !move.isPromotion())
-                ? moveScore(pos, move, Move{}, ply)
-                : 0;
+            const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
+            const bool givesCheckMove = pvNode
+                ? cachedGivesCheck(givesCheckBits.data(), moveIndex)
+                : (!terminalKingCapture && pos.givesCheck(move));
+            const bool quiet = !move.isCapture() && !move.isPromotion();
+            const int lmrHistoryScore = quiet ? orderedScores[moveIndex] : 0;
+
             int score = -INF;
             bool legal = true;
 
-            const bool quiet = !move.isCapture() && !move.isPromotion();
-            const int mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
+            const bool moveMateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
             // Late Move Pruning (LMP): at non-PV nodes, stop spending search
@@ -466,11 +657,30 @@ namespace ironphoenix {
                 && quiet
                 && move != ttMove
                 && !givesCheckMove
-                && !mateWindow
+                && !moveMateWindow
                 && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
                 continue;
             }
 
+            // History Move Pruning (HMP): prune quiet moves with strongly negative
+            // accumulated history before they consume a search. Keep it shallow,
+            // protect the first legal move, and never prune tactical/special moves.
+            if (!pvNode
+                && !inCheckNode
+                && depth <= HISTORY_MOVE_PRUNE_MAX_DEPTH
+                && legalMoves > 0
+                && quiet
+                && move != ttMove
+                && !givesCheckMove
+                && !moveMateWindow
+                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth) {
+                continue;
+            }
+
+            // Static Exchange Evaluation (SEE) Pruning: at non-PV nodes, if a
+            // capture move is likely to lose material, skip it. This is only done
+            // at shallow depths, since SEE is not always accurate in complex positions.
+            // SEE pruning is not applied to TT moves, promotions, checks, or mate-window searches.
             if (!pvNode
                 && !inCheckNode
                 && depth <= tuning.seePruneMaxDepth
@@ -479,7 +689,7 @@ namespace ironphoenix {
                 && !move.isPromotion()
                 && move != ttMove
                 && !givesCheckMove
-                && !mateWindow) {
+                && !moveMateWindow) {
                 const int seeThreshold = -tuning.seePruneMarginPerDepth * depth;
                 if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
                     continue;
@@ -560,24 +770,26 @@ namespace ironphoenix {
             if (cutoff) {
                 if (!terminalKingCapture) {
                     if (move.isCapture()) {
+                        const Move* failedCaptures = failedMoves.data() + MAX_MOVES - failedCaptureCount;
                         updateCaptureCutoff(us, move, movingPiece, depth,
-                            failedCaptures.data(), failedCaptureCount, pos);
+                            failedCaptures, failedCaptureCount, pos);
                     }
                     else if (!move.isPromotion()) {
                         updateQuietCutoff(pos, us, move, movingPiece, depth, ply,
-                            failedQuiets.data(), failedQuietCount);
+                            failedMoves.data(), failedQuietCount);
                     }
                 }
                 break;
             }
 
-            if (move.isCapture()) {
-                if (failedCaptureCount < failedCaptures.size())
-                    failedCaptures[failedCaptureCount++] = move;
-            }
-            else if (!move.isPromotion()) {
-                if (failedQuietCount < failedQuiets.size())
-                    failedQuiets[failedQuietCount++] = move;
+            if (failedQuietCount + failedCaptureCount < failedMoves.size()) {
+                if (move.isCapture()) {
+                    ++failedCaptureCount;
+                    failedMoves[MAX_MOVES - failedCaptureCount] = move;
+                }
+                else if (!move.isPromotion()) {
+                    failedMoves[failedQuietCount++] = move;
+                }
             }
         }
 
@@ -665,6 +877,7 @@ namespace ironphoenix {
         startTime_ = std::chrono::steady_clock::now();
         timeBudgetMs_ = calculateTimeBudget(position, limits_);
         nodes_ = 0;
+        nextTimeCheckNode_ = 0;
         selDepth_ = 0;
         for (auto& row : pv_)
             row.fill(Move{});

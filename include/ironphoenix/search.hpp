@@ -64,6 +64,7 @@ namespace ironphoenix {
         static constexpr int INF = 32000;
         static constexpr int MATE_SCORE = 30000;
         static constexpr int MATE_THRESHOLD = 29000;
+        static constexpr std::uint64_t TIME_CHECK_NODE_INTERVAL = 1024;
 
         TranspositionTable tt_{ 64 };
         HistoryTables history_{};
@@ -75,6 +76,7 @@ namespace ironphoenix {
         std::chrono::steady_clock::time_point startTime_{};
         std::int64_t timeBudgetMs_ = 0;
         std::uint64_t nodes_ = 0;
+        std::uint64_t nextTimeCheckNode_ = 0;
         int selDepth_ = 0;
 
         std::array<std::array<Move, MAX_PLY>, MAX_PLY> pv_{};
@@ -85,11 +87,17 @@ namespace ironphoenix {
         void run(Position position, std::ostream& out);
         void runMultiPV(Position position, int multiPV, std::ostream& out);
 
-        int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode);
+        int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull = true);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
-        int moveScore(const Position& pos, Move move, Move ttMove, int ply) const noexcept;
-        void orderMoves(const Position& pos, Move* begin, Move* end, Move ttMove, int ply) const;
+        int moveScore(const Position& pos, Move move, Move ttMove, int ply, bool givesCheck) const noexcept;
+        void orderMoves(const Position& pos,
+                        Move* begin,
+                        Move* end,
+                        Move ttMove,
+                        int ply,
+                        int* orderedScores = nullptr,
+                        std::uint64_t* givesCheckBits = nullptr) const;
 
         [[nodiscard]] int historyBonus(int depth) const noexcept;
         void updateQuietCutoff(const Position& pos, Color mover, Move cutoffMove, Piece movingPiece,
