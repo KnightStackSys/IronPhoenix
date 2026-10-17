@@ -450,6 +450,7 @@ namespace ironphoenix {
 
         const int originalAlpha = alpha;
         const bool inCheckNode = pos.inCheck();
+        const auto& tuning = Tuning::search();
 
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
@@ -487,6 +488,50 @@ namespace ironphoenix {
             generatePseudoLegalMoves(pos, moves);
         else
             generateTacticalMoves(pos, moves);
+
+        // Position-level delta pruning ("big delta") for QSearch. If even
+        // the best plausible non-forcing material gain cannot raise alpha, the
+        // whole tactical continuation can be skipped before move ordering/search.
+        //
+        // 4PC is tactically volatile, so this is deliberately restricted to
+        // non-PV nodes and disabled for checks on either allied king, mate-score
+        // windows, promotions, checking moves, and immediate king captures.
+        if (!inCheckNode && !pvNode) {
+            const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
+            const Color partner = static_cast<Color>(
+                static_cast<unsigned>(pos.sideToMove()) ^ 2u);
+
+            // A queen is the largest ordinary capturable piece. Use it as a cheap
+            // first gate so we only scan tactical moves for forcing exceptions
+            // when a node-level delta cutoff is actually possible.
+            if (!mateWindow
+                && !pos.inCheck(partner)
+                && bestScore + pieceValue(QUEEN) + tuning.qsearchDeltaMargin <= alpha) {
+
+                int maxGain = 0;
+                bool hasForcingTactic = false;
+
+                for (Move move : moves) {
+                    if ((move.isCapture() && isTerminalKingCapture(pos, move))
+                        || move.isPromotion()
+                        || pos.givesCheck(move)) {
+                        hasForcingTactic = true;
+                        break;
+                    }
+
+                    if (move.isCapture())
+                        maxGain = std::max(maxGain, pieceValue(move.captured()));
+                }
+
+                if (!hasForcingTactic
+                    && bestScore + maxGain + tuning.qsearchDeltaMargin <= alpha) {
+                    // Do not store this heuristic cutoff in the TT. Returning the
+                    // fail-low stand-pat score keeps the TT free of speculative
+                    // bounds while preserving fail-soft behavior.
+                    return bestScore;
+                }
+            }
+        }
 
         orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
 

@@ -39,6 +39,7 @@ namespace ironphoenix::Tuning {
                 || name == "SearchAspirationDelta"
                 || name == "SearchSEEPruneMaxDepth"
                 || name == "SearchSEEPruneMargin"
+                || name == "SearchQSearchDeltaMargin"
                 || name == "SearchHistoryBonusScale"
                 || name == "SearchHistoryBonusMax"
                 || name == "SearchCounterMoveBonus"
@@ -109,6 +110,8 @@ namespace ironphoenix::Tuning {
             p.seePruneMaxDepth = value;
         else if (name == "SearchSEEPruneMargin" && inRange(value, 0, 2000))
             p.seePruneMarginPerDepth = value;
+        else if (name == "SearchQSearchDeltaMargin" && inRange(value, 0, 5000))
+            p.qsearchDeltaMargin = value;
         else if (name == "SearchHistoryBonusScale" && inRange(value, 0, 2048))
             p.historyBonusScale = value;
         else if (name == "SearchHistoryBonusMax" && inRange(value, 1, 32767))
@@ -211,6 +214,7 @@ namespace ironphoenix::Tuning {
             << "option name SearchAspirationDelta type spin default 50 min 1 max 2000\n"
             << "option name SearchSEEPruneMaxDepth type spin default 4 min 0 max 32\n"
             << "option name SearchSEEPruneMargin type spin default 80 min 0 max 2000\n"
+            << "option name SearchQSearchDeltaMargin type spin default 250 min 0 max 5000\n"
             << "option name SearchHistoryBonusScale type spin default 64 min 0 max 2048\n"
             << "option name SearchHistoryBonusMax type spin default 2048 min 1 max 32767\n"
             << "option name SearchCounterMoveBonus type spin default 32000 min 0 max 50000000\n"
@@ -239,6 +243,7 @@ namespace ironphoenix::Tuning {
             << " SearchAspirationDelta=" << s.aspirationInitialDelta
             << " SearchSEEPruneMaxDepth=" << s.seePruneMaxDepth
             << " SearchSEEPruneMargin=" << s.seePruneMarginPerDepth
+            << " SearchQSearchDeltaMargin=" << s.qsearchDeltaMargin
             << " SearchHistoryBonusScale=" << s.historyBonusScale
             << " SearchHistoryBonusMax=" << s.historyBonusMax
             << " SearchCounterMoveBonus=" << s.counterMoveBonus

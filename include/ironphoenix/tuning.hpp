@@ -14,6 +14,7 @@ namespace ironphoenix {
             int aspirationInitialDelta = 50;
             int seePruneMaxDepth = 4;
             int seePruneMarginPerDepth = 80;
+            int qsearchDeltaMargin = 250;
             int historyBonusScale = 64;
             int historyBonusMax = 2048;
             int counterMoveBonus = 32'000;
