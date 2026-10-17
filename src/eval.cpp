@@ -34,9 +34,12 @@ namespace ironphoenix::Eval {
             }
         }
 
+        IRONPHOENIX_FORCE_INLINE Color partnerOf(Color c) noexcept {
+            return static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
+        }
+
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
-            const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
-            return pos.occupancy(c) | pos.occupancy(partner);
+            return pos.occupancy(c) | pos.occupancy(partnerOf(c));
         }
 
         int materialForColor(const Position& pos, Color c) noexcept {
@@ -92,9 +95,108 @@ namespace ironphoenix::Eval {
             return score;
         }
 
+        int bishopPairForColor(const Position& pos, Color c) noexcept {
+            const auto& params = Tuning::eval();
+            return pos.pieces(c, BISHOP).popcount() >= 2
+                ? params.bishopPairBonus
+                : 0;
+        }
+
+        int pawnStructureForColor(const Position& pos, Color c) noexcept {
+            const auto& params = Tuning::eval();
+            const Color partner = partnerOf(c);
+            const Bitboard ownPawns = pos.pieces(c, PAWN);
+            const Bitboard partnerPawns = pos.isAlive(partner)
+                ? pos.pieces(partner, PAWN)
+                : Bitboard{};
+
+            Bitboard pawns = ownPawns;
+            int score = 0;
+
+            while (pawns) {
+                const Square sq = popLsb(pawns);
+
+                // In teams, support from either player's pawn structure matters.
+                const bool ownSupport = static_cast<bool>(Geometry::PawnAttackers[c][sq] & ownPawns);
+                const bool partnerSupport = static_cast<bool>(Geometry::PawnAttackers[partner][sq] & partnerPawns);
+                if (ownSupport || partnerSupport)
+                    score += params.supportedPawnBonus;
+            }
+
+            return score;
+        }
+
+        int kingSafetyForColor(const Position& pos, Color c) noexcept {
+            if (!pos.isAlive(c))
+                return 0;
+
+            const auto& params = Tuning::eval();
+            const Color partner = partnerOf(c);
+            const Square king = pos.kingSquare(c);
+            if (king == SQ_NONE)
+                return 0;
+
+            const Bitboard occ = pos.occupancy();
+            const Bitboard teamPawns = pos.pieces(c, PAWN)
+                | (pos.isAlive(partner) ? pos.pieces(partner, PAWN) : Bitboard{});
+
+            int score = 0;
+
+            // Either teammate's pawn can physically shelter the king.
+            const int pawnShield = (Geometry::KingAttacks[king] & teamPawns).popcount();
+            score += pawnShield * params.kingPawnShieldBonus;
+
+            // 4PC king danger is more about enemy access to the king zone than
+            // generic board centralization. Count attacked adjacent king squares.
+            Bitboard kingZone = Geometry::KingAttacks[king] & Geometry::BoardMask;
+            int attackedZoneSquares = 0;
+            while (kingZone) {
+                const Square sq = popLsb(kingZone);
+                if (pos.isAttackedByEnemy(sq, c, occ))
+                    ++attackedZoneSquares;
+            }
+            score -= attackedZoneSquares * params.kingZoneAttackPenalty;
+
+            if (pos.inCheck(c))
+                score -= params.checkPenalty;
+
+            return score;
+        }
+
+        int partnerCoordinationForColor(const Position& pos, Color c) noexcept {
+            const Color partner = partnerOf(c);
+            if (!pos.isAlive(partner))
+                return 0;
+
+            const auto& params = Tuning::eval();
+            const Bitboard occ = pos.occupancy();
+            int score = 0;
+
+            // Reward pieces that are directly defended by the teammate. This is
+            // a genuinely 4PC-specific coordination signal and is independent of
+            // geometric assumptions about where a piece "should" be placed.
+            for (unsigned pt = PAWN; pt <= QUEEN; ++pt) {
+                Bitboard pieces = pos.pieces(c, static_cast<PieceType>(pt));
+                while (pieces) {
+                    const Square sq = popLsb(pieces);
+                    if (pos.attackersTo(sq, partner, occ))
+                        score += params.partnerSupportBonus;
+                }
+            }
+
+            return score;
+        }
+
         int playerScore(const Position& pos, Color c) noexcept {
+            if (!pos.isAlive(c))
+                return 0;
+
             return materialForColor(pos, c)
-                + mobilityForColor(pos, c);
+                + mobilityForColor(pos, c)
+                + bishopPairForColor(pos, c)
+                + pawnStructureForColor(pos, c)
+                + kingSafetyForColor(pos, c)
+                + partnerCoordinationForColor(pos, c);
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
@@ -112,7 +214,8 @@ namespace ironphoenix::Eval {
             }
 
             const int score = team0 - team1;
-            return teamOf(pos.sideToMove()) == 0 ? score : -score;
+            const int relative = teamOf(pos.sideToMove()) == 0 ? score : -score;
+            return relative + Tuning::eval().tempoBonus;
         }
 
     }

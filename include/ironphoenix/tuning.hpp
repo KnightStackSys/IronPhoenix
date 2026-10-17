@@ -34,6 +34,16 @@ namespace ironphoenix {
             int bishopMobility = 4;
             int rookMobility = 2;
             int queenMobility = 1;
+
+            // 4PC-oriented positional HCE terms. These intentionally start
+            // conservative so each can be strength-tested and tuned.
+            int bishopPairBonus = 30;
+            int supportedPawnBonus = 6;
+            int kingPawnShieldBonus = 6;
+            int checkPenalty = 40;
+            int kingZoneAttackPenalty = 5;
+            int partnerSupportBonus = 4;
+            int tempoBonus = 8;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;
