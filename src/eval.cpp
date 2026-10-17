@@ -5,6 +5,8 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
+#include <array>
+
 namespace ironphoenix::Eval {
 
     namespace {
@@ -50,8 +52,11 @@ namespace ironphoenix::Eval {
             return material;
         }
 
-        int mobilityForColor(const Position& pos, Color c) noexcept {
-            const Bitboard blockedByTeam = teamOccupancy(pos, c);
+        int mobilityForColor(const Position& pos, Color c, Bitboard enemyPawnAttacks) noexcept {
+            // Pawn-safe mobility is a positional approximation, not a legal
+            // move count. Keep real occupancy for slider rays; unsafe squares
+            // are excluded as destinations, not treated as extra blockers.
+            const Bitboard mobilityArea = ~(teamOccupancy(pos, c) | enemyPawnAttacks);
 
             int score = 0;
 
@@ -79,7 +84,7 @@ namespace ironphoenix::Eval {
                         break;
                     }
 
-                    const int mobility = (attacks & ~blockedByTeam).popcount();
+                    const int mobility = (attacks & mobilityArea).popcount();
                     score += mobility * mobilityWeight(pt);
                 }
             };
@@ -92,18 +97,28 @@ namespace ironphoenix::Eval {
             return score;
         }
 
-        int playerScore(const Position& pos, Color c) noexcept {
+        int playerScore(const Position& pos, Color c, Bitboard enemyPawnAttacks) noexcept {
             return materialForColor(pos, c)
-                + mobilityForColor(pos, c);
+                + mobilityForColor(pos, c, enemyPawnAttacks);
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0;
             int team1 = 0;
 
+            // Build each team's pawn-control map once, respecting all four
+            // pawn orientations. Geometric attacks include pinned pawns.
+            std::array<Bitboard, 2> pawnAttacksByTeam{};
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
-                const int score = playerScore(pos, c);
+                Bitboard pawns = pos.pieces(c, PAWN);
+                while (pawns)
+                    pawnAttacksByTeam[teamOf(c)] |= Geometry::PawnAttacks[c][popLsb(pawns)];
+            }
+
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color c = static_cast<Color>(ci);
+                const int score = playerScore(pos, c, pawnAttacksByTeam[teamOf(c) ^ 1]);
 
                 if (teamOf(c) == 0)
                     team0 += score;
