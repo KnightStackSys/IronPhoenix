@@ -4,8 +4,6 @@
 
 It is built around the chess.com-style 4PC cross board, team-aware search, fast move generation, handcrafted evaluation, and **PhoenixNet**, a purpose-built NNUE evaluator for four-player Teams chess.
 
-> ❤️ Built with love by Nick.
-
 ---
 
 ## ♟️ What IronPhoenix Plays
