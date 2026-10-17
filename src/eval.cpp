@@ -51,7 +51,6 @@ namespace ironphoenix::Eval {
         }
 
         int mobilityForColor(const Position& pos, Color c) noexcept {
-            const Bitboard occ = pos.occupancy();
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
 
             int score = 0;
@@ -68,13 +67,13 @@ namespace ironphoenix::Eval {
                         attacks = Geometry::KnightAttacks[sq];
                         break;
                     case BISHOP:
-                        attacks = Geometry::bishopAttacks(sq, occ);
+                        attacks = pos.bishopAttacks(sq);
                         break;
                     case ROOK:
-                        attacks = Geometry::rookAttacks(sq, occ);
+                        attacks = pos.rookAttacks(sq);
                         break;
                     case QUEEN:
-                        attacks = Geometry::queenAttacks(sq, occ);
+                        attacks = pos.queenAttacks(sq);
                         break;
                     default:
                         break;

@@ -18,6 +18,7 @@ namespace ironphoenix {
         for (auto& bb : colorOcc_)
             bb.clear();
         allOcc_.clear();
+        lineOcc_ = Geometry::LineBlockers;
         kingSq_.fill(SQ_NONE);
         enPassant_.fill(SQ_NONE);
         sideToMove_ = RED;
@@ -36,6 +37,7 @@ namespace ironphoenix {
         pieceBB_[c][pt].set(sq);
         colorOcc_[c].set(sq);
         allOcc_.set(sq);
+        addLineOccupancy(sq);
         if (pt == KING)
             kingSq_[c] = sq;
         key_ ^= Zobrist::PieceSquare[p][sq];
@@ -53,9 +55,37 @@ namespace ironphoenix {
         pieceBB_[c][pt].reset(sq);
         colorOcc_[c].reset(sq);
         allOcc_.reset(sq);
+        removeLineOccupancy(sq);
         if (pt == KING && kingSq_[c] == sq)
             kingSq_[c] = SQ_NONE;
         key_ ^= Zobrist::PieceSquare[p][sq];
+        return p;
+    }
+
+    void Position::rawPutNoState(Square sq, Piece p) noexcept {
+        assert(sq < SQUARE_NB && p != NO_PIECE && board_[sq] == NO_PIECE);
+        board_[sq] = p;
+        const Color c = colorOf(p);
+        const PieceType pt = typeOf(p);
+        pieceBB_[c][pt].set(sq);
+        colorOcc_[c].set(sq);
+        allOcc_.set(sq);
+        addLineOccupancy(sq);
+    }
+
+    Piece Position::rawRemoveNoState(Square sq) noexcept {
+        assert(sq < SQUARE_NB);
+        const Piece p = board_[sq];
+        if (p == NO_PIECE)
+            return NO_PIECE;
+
+        const Color c = colorOf(p);
+        const PieceType pt = typeOf(p);
+        board_[sq] = NO_PIECE;
+        pieceBB_[c][pt].reset(sq);
+        colorOcc_[c].reset(sq);
+        allOcc_.reset(sq);
+        removeLineOccupancy(sq);
         return p;
     }
 
@@ -80,6 +110,9 @@ namespace ironphoenix {
     }
 
     void Position::setCastlingRights(std::uint8_t rights) {
+        if (castlingRights_ == rights)
+            return;
+
         const std::uint8_t changed = static_cast<std::uint8_t>(castlingRights_ ^ rights);
         for (unsigned bit = 0; bit < 8; ++bit)
             if (changed & (1u << bit))
@@ -100,6 +133,9 @@ namespace ironphoenix {
 
     void Position::setAliveMask(std::uint8_t mask) {
         mask &= 0xF;
+        if (aliveMask_ == mask)
+            return;
+
         const std::uint8_t changed = static_cast<std::uint8_t>(aliveMask_ ^ mask);
         for (unsigned c = 0; c < COLOR_NB; ++c)
             if (changed & (1u << c))
@@ -128,6 +164,9 @@ namespace ironphoenix {
         assert(verify());
     }
 
+    // Generic arbitrary-occupancy attack helpers. These remain ray-based because
+    // SEE, givesCheck and castling temporarily remove/add pieces without mutating
+    // the Position's current compact line occupancy.
     Bitboard Position::attackersTo(Square target, Color by, Bitboard occ) const noexcept {
         if (target == SQ_NONE)
             return {};
@@ -146,15 +185,27 @@ namespace ironphoenix {
     }
 
     Bitboard Position::attackersToEnemy(Square target, Color victim, Bitboard occ) const noexcept {
+        if (target == SQ_NONE)
+            return {};
+
+        const unsigned c0 = teamOf(victim) == 0 ? static_cast<unsigned>(BLUE) : static_cast<unsigned>(RED);
+        const unsigned c1 = teamOf(victim) == 0 ? static_cast<unsigned>(GREEN) : static_cast<unsigned>(YELLOW);
+
         Bitboard out{};
-        if (teamOf(victim) == 0) {
-            out |= attackersTo(target, BLUE, occ);
-            out |= attackersTo(target, GREEN, occ);
-        }
-        else {
-            out |= attackersTo(target, RED, occ);
-            out |= attackersTo(target, YELLOW, occ);
-        }
+        out |= Geometry::PawnAttackers[c0][target] & pieceBB_[c0][PAWN] & occ;
+        out |= Geometry::PawnAttackers[c1][target] & pieceBB_[c1][PAWN] & occ;
+
+        const Bitboard knights = (pieceBB_[c0][KNIGHT] | pieceBB_[c1][KNIGHT]) & occ;
+        const Bitboard kings = (pieceBB_[c0][KING] | pieceBB_[c1][KING]) & occ;
+        out |= Geometry::KnightAttacks[target] & knights;
+        out |= Geometry::KingAttacks[target] & kings;
+
+        const Bitboard queens = pieceBB_[c0][QUEEN] | pieceBB_[c1][QUEEN];
+        const Bitboard rookers = (pieceBB_[c0][ROOK] | pieceBB_[c1][ROOK] | queens) & occ;
+        const Bitboard bishops = (pieceBB_[c0][BISHOP] | pieceBB_[c1][BISHOP] | queens) & occ;
+
+        out |= Geometry::rookAttacks(target, occ) & rookers;
+        out |= Geometry::bishopAttacks(target, occ) & bishops;
         return out;
     }
 
@@ -175,19 +226,100 @@ namespace ironphoenix {
     }
 
     bool Position::isAttackedByEnemy(Square target, Color victim, Bitboard occ) const noexcept {
-        if (teamOf(victim) == 0)
-            return isAttackedBy(target, BLUE, occ) || isAttackedBy(target, GREEN, occ);
-        return isAttackedBy(target, RED, occ) || isAttackedBy(target, YELLOW, occ);
+        if (target == SQ_NONE)
+            return false;
+
+        const unsigned c0 = teamOf(victim) == 0 ? static_cast<unsigned>(BLUE) : static_cast<unsigned>(RED);
+        const unsigned c1 = teamOf(victim) == 0 ? static_cast<unsigned>(GREEN) : static_cast<unsigned>(YELLOW);
+
+        if (Geometry::PawnAttackers[c0][target] & pieceBB_[c0][PAWN] & occ) return true;
+        if (Geometry::PawnAttackers[c1][target] & pieceBB_[c1][PAWN] & occ) return true;
+
+        const Bitboard knights = (pieceBB_[c0][KNIGHT] | pieceBB_[c1][KNIGHT]) & occ;
+        if (Geometry::KnightAttacks[target] & knights) return true;
+
+        const Bitboard kings = (pieceBB_[c0][KING] | pieceBB_[c1][KING]) & occ;
+        if (Geometry::KingAttacks[target] & kings) return true;
+
+        const Bitboard queens = pieceBB_[c0][QUEEN] | pieceBB_[c1][QUEEN];
+        const Bitboard rookers = (pieceBB_[c0][ROOK] | pieceBB_[c1][ROOK] | queens) & occ;
+        if (Geometry::rookAttacks(target, occ) & rookers) return true;
+
+        const Bitboard bishops = (pieceBB_[c0][BISHOP] | pieceBB_[c1][BISHOP] | queens) & occ;
+        return static_cast<bool>(Geometry::bishopAttacks(target, occ) & bishops);
+    }
+
+    IRONPHOENIX_FORCE_INLINE Bitboard Position::attackersToCurrent(Square target, Color by) const noexcept {
+        if (target == SQ_NONE)
+            return {};
+
+        const unsigned c = static_cast<unsigned>(by);
+        Bitboard out{};
+        out |= Geometry::PawnAttackers[c][target] & pieceBB_[c][PAWN];
+        out |= Geometry::KnightAttacks[target] & pieceBB_[c][KNIGHT];
+        out |= Geometry::KingAttacks[target] & pieceBB_[c][KING];
+        out |= rookAttacks(target) & (pieceBB_[c][ROOK] | pieceBB_[c][QUEEN]);
+        out |= bishopAttacks(target) & (pieceBB_[c][BISHOP] | pieceBB_[c][QUEEN]);
+        return out;
+    }
+
+    IRONPHOENIX_FORCE_INLINE Bitboard Position::attackersToEnemyCurrent(Square target, Color victim) const noexcept {
+        if (target == SQ_NONE)
+            return {};
+
+        const unsigned c0 = teamOf(victim) == 0 ? static_cast<unsigned>(BLUE) : static_cast<unsigned>(RED);
+        const unsigned c1 = teamOf(victim) == 0 ? static_cast<unsigned>(GREEN) : static_cast<unsigned>(YELLOW);
+
+        Bitboard out{};
+        out |= Geometry::PawnAttackers[c0][target] & pieceBB_[c0][PAWN];
+        out |= Geometry::PawnAttackers[c1][target] & pieceBB_[c1][PAWN];
+        out |= Geometry::KnightAttacks[target] & (pieceBB_[c0][KNIGHT] | pieceBB_[c1][KNIGHT]);
+        out |= Geometry::KingAttacks[target] & (pieceBB_[c0][KING] | pieceBB_[c1][KING]);
+
+        const Bitboard queens = pieceBB_[c0][QUEEN] | pieceBB_[c1][QUEEN];
+        out |= rookAttacks(target) & (pieceBB_[c0][ROOK] | pieceBB_[c1][ROOK] | queens);
+        out |= bishopAttacks(target) & (pieceBB_[c0][BISHOP] | pieceBB_[c1][BISHOP] | queens);
+        return out;
+    }
+
+    IRONPHOENIX_FORCE_INLINE bool Position::isAttackedByCurrent(Square target, Color by) const noexcept {
+        if (target == SQ_NONE)
+            return false;
+
+        const unsigned c = static_cast<unsigned>(by);
+        if (Geometry::PawnAttackers[c][target] & pieceBB_[c][PAWN]) return true;
+        if (Geometry::KnightAttacks[target] & pieceBB_[c][KNIGHT]) return true;
+        if (Geometry::KingAttacks[target] & pieceBB_[c][KING]) return true;
+        if (rookAttacks(target) & (pieceBB_[c][ROOK] | pieceBB_[c][QUEEN])) return true;
+        return static_cast<bool>(bishopAttacks(target) & (pieceBB_[c][BISHOP] | pieceBB_[c][QUEEN]));
+    }
+
+    IRONPHOENIX_FORCE_INLINE bool Position::isAttackedByEnemyCurrent(Square target, Color victim) const noexcept {
+        if (target == SQ_NONE)
+            return false;
+
+        const unsigned c0 = teamOf(victim) == 0 ? static_cast<unsigned>(BLUE) : static_cast<unsigned>(RED);
+        const unsigned c1 = teamOf(victim) == 0 ? static_cast<unsigned>(GREEN) : static_cast<unsigned>(YELLOW);
+
+        if (Geometry::PawnAttackers[c0][target] & pieceBB_[c0][PAWN]) return true;
+        if (Geometry::PawnAttackers[c1][target] & pieceBB_[c1][PAWN]) return true;
+        if (Geometry::KnightAttacks[target] & (pieceBB_[c0][KNIGHT] | pieceBB_[c1][KNIGHT])) return true;
+        if (Geometry::KingAttacks[target] & (pieceBB_[c0][KING] | pieceBB_[c1][KING])) return true;
+
+        const Bitboard queens = pieceBB_[c0][QUEEN] | pieceBB_[c1][QUEEN];
+        if (rookAttacks(target) & (pieceBB_[c0][ROOK] | pieceBB_[c1][ROOK] | queens)) return true;
+        return static_cast<bool>(bishopAttacks(target)
+            & (pieceBB_[c0][BISHOP] | pieceBB_[c1][BISHOP] | queens));
     }
 
     bool Position::inCheck(Color c) const noexcept {
         const Square k = kingSq_[c];
-        return k != SQ_NONE && isAttackedByEnemy(k, c, allOcc_);
+        return k != SQ_NONE && isAttackedByEnemyCurrent(k, c);
     }
 
     void Position::refreshCheckers() noexcept {
         const Square k = kingSq_[sideToMove_];
-        checkers_ = k == SQ_NONE ? Bitboard{} : attackersToEnemy(k, sideToMove_, allOcc_);
+        checkers_ = k == SQ_NONE ? Bitboard{} : attackersToEnemyCurrent(k, sideToMove_);
     }
 
     Square Position::capturedSquare(Move m, Color mover) const noexcept {
@@ -291,28 +423,36 @@ namespace ironphoenix {
         Square from,
         Piece captured,
         Square capturedSq) noexcept {
+
+        const PieceType movingType = moving == NO_PIECE ? PT_NONE : typeOf(moving);
+        const bool capturedRook = captured != NO_PIECE && typeOf(captured) == ROOK;
+
+        // The overwhelming majority of moves cannot affect castling rights.
+        if (movingType != KING && movingType != ROOK && !capturedRook)
+            return;
+
         std::uint8_t rights = castlingRights_;
         if (moving != NO_PIECE) {
             const Color c = colorOf(moving);
-            const PieceType pt = typeOf(moving);
-            if (pt == KING) {
+            if (movingType == KING) {
                 rights &= static_cast<std::uint8_t>(~(3u << (2u * static_cast<unsigned>(c))));
             }
-            else if (pt == ROOK) {
+            else if (movingType == ROOK) {
                 for (const auto& lane : castle_[c])
                     if (lane.valid() && from == lane.rookFrom)
                         rights &= static_cast<std::uint8_t>(~(1u << lane.rightBit));
             }
         }
 
-        if (captured != NO_PIECE && typeOf(captured) == ROOK) {
+        if (capturedRook) {
             const Color c = colorOf(captured);
             for (const auto& lane : castle_[c])
                 if (lane.valid() && capturedSq == lane.rookFrom)
                     rights &= static_cast<std::uint8_t>(~(1u << lane.rightBit));
         }
 
-        setCastlingRights(rights);
+        if (rights != castlingRights_)
+            setCastlingRights(rights);
     }
 
     void Position::makeMove(Move m, StateInfo& st) {
@@ -342,7 +482,6 @@ namespace ironphoenix {
 #endif
 
         setEnPassant(us, SQ_NONE);
-
         updateCastlingRightsForMove(moving, from, st.captured, st.capturedSq);
 
         if (st.captured != NO_PIECE) {
@@ -399,26 +538,67 @@ namespace ironphoenix {
         const Color us = static_cast<Color>(st.side);
         const Square from = m.from();
         const Square to = m.to();
-        \
-        rawRemove(to);
+
+        // The exact Zobrist/king state is restored from StateInfo below, so
+        // undo only needs to repair the board and occupancy structures here.
+        rawRemoveNoState(to);
 
         if (m.isCastle()) {
             const CastleLane* lane = castleLane(us, m);
             assert(lane && lane->valid());
-            const Piece rook = rawRemove(lane->rookTo);
+            const Piece rook = rawRemoveNoState(lane->rookTo);
             assert(rook == makePiece(us, ROOK));
-            rawPut(lane->rookFrom, rook);
+            rawPutNoState(lane->rookFrom, rook);
         }
 
-        rawPut(from, st.moved);
+        rawPutNoState(from, st.moved);
         if (st.captured != NO_PIECE)
-            rawPut(st.capturedSq, st.captured);
+            rawPutNoState(st.capturedSq, st.captured);
 
         enPassant_ = st.enPassant;
         kingSq_ = st.kingSq;
         castlingRights_ = st.castlingRights;
         aliveMask_ = st.aliveMask;
         sideToMove_ = us;
+        checkers_ = st.checkers;
+        key_ = st.key;
+
+        assert(verify());
+    }
+
+    void Position::makeNullMove(StateInfo& st) {
+        const Color us = sideToMove_;
+
+        st.key = key_;
+        st.checkers = checkers_;
+        st.enPassant = enPassant_;
+        st.kingSq = kingSq_;
+        st.castlingRights = castlingRights_;
+        st.aliveMask = aliveMask_;
+        st.side = static_cast<std::uint8_t>(us);
+        st.moved = NO_PIECE;
+        st.captured = NO_PIECE;
+        st.capturedSq = SQ_NONE;
+
+        // In 4PC an en-passant marker belongs to the player who created it and
+        // normally expires when that player gets their next turn. A null move
+        // consumes that turn, so expire only the current player's marker.
+        setEnPassant(us, SQ_NONE);
+
+        const Color them = nextColor(us);
+        key_ ^= Zobrist::Side[us] ^ Zobrist::Side[them];
+        sideToMove_ = them;
+        refreshCheckers();
+
+        assert(verify());
+    }
+
+    void Position::undoNullMove(const StateInfo& st) {
+        enPassant_ = st.enPassant;
+        kingSq_ = st.kingSq;
+        castlingRights_ = st.castlingRights;
+        aliveMask_ = st.aliveMask;
+        sideToMove_ = static_cast<Color>(st.side);
         checkers_ = st.checkers;
         key_ = st.key;
 
@@ -451,6 +631,7 @@ namespace ironphoenix {
         std::array<std::array<Bitboard, PIECE_TYPE_NB>, COLOR_NB> rebuiltPieces{};
         std::array<Bitboard, COLOR_NB> rebuiltColor{};
         Bitboard rebuiltAll{};
+        std::array<std::uint16_t, Geometry::LINE_NB> rebuiltLines = Geometry::LineBlockers;
         std::array<Square, COLOR_NB> rebuiltKing{ SQ_NONE, SQ_NONE, SQ_NONE, SQ_NONE };
 
         for (unsigned s = 0; s < SQUARE_NB; ++s) {
@@ -461,17 +642,24 @@ namespace ironphoenix {
             const PieceType pt = typeOf(p);
             if (pt < PAWN || pt > KING)
                 return false;
-            rebuiltPieces[c][pt].set(static_cast<Square>(s));
-            rebuiltColor[c].set(static_cast<Square>(s));
-            rebuiltAll.set(static_cast<Square>(s));
+
+            const Square sq = static_cast<Square>(s);
+            rebuiltPieces[c][pt].set(sq);
+            rebuiltColor[c].set(sq);
+            rebuiltAll.set(sq);
+            rebuiltLines[Geometry::LineId[Geometry::LINE_RANK][sq]] |= Geometry::LineBit[Geometry::LINE_RANK][sq];
+            rebuiltLines[Geometry::LineId[Geometry::LINE_FILE][sq]] |= Geometry::LineBit[Geometry::LINE_FILE][sq];
+            rebuiltLines[Geometry::LineId[Geometry::LINE_DIAG_A][sq]] |= Geometry::LineBit[Geometry::LINE_DIAG_A][sq];
+            rebuiltLines[Geometry::LineId[Geometry::LINE_DIAG_B][sq]] |= Geometry::LineBit[Geometry::LINE_DIAG_B][sq];
+
             if (pt == KING) {
                 if (rebuiltKing[c] != SQ_NONE)
                     return false;
-                rebuiltKing[c] = static_cast<Square>(s);
+                rebuiltKing[c] = sq;
             }
         }
 
-        if (rebuiltAll != allOcc_ || rebuiltKing != kingSq_)
+        if (rebuiltAll != allOcc_ || rebuiltKing != kingSq_ || rebuiltLines != lineOcc_)
             return false;
         for (unsigned c = 0; c < COLOR_NB; ++c) {
             if (rebuiltColor[c] != colorOcc_[c])

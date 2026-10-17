@@ -1,10 +1,12 @@
-# 🔥 IronPhoenix
+<p align="center">
+  <img src="bin/iron-phoenix.png" alt="Iron Phoenix logo" width="700">
+</p>
+
+# 💻 IronPhoenix
 
 **IronPhoenix** is a high-performance **4-player chess Teams engine** written in modern C++20.
 
 It is built around the chess.com-style 4PC cross board, team-aware search, fast move generation, handcrafted evaluation, and **PhoenixNet**, a purpose-built NNUE evaluator for four-player Teams chess.
-
-> ❤️ Built with love by Nick.
 
 ---
 
@@ -38,6 +40,8 @@ IronPhoenix includes a modern alpha-beta search stack designed specifically for 
 - Static Exchange Evaluation (SEE)
 - Late Move Reductions (LMR)
 - Late Move Pruning (LMP)
+- Null Move Pruning (NMP)
+- History Move Pruning (HMP)
 - Search pruning and reductions
 - Iterative deepening
 - Principal variation reporting
