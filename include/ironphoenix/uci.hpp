@@ -32,6 +32,8 @@ namespace ironphoenix {
         SetupType setup_ = SetupType::Modern;
         int multiPV_ = 1;
         bool useNNUE_ = false;
+        bool ponder_ = false;
+        std::int64_t moveOverheadMs_ = 50;
         SearchEngine search_{};
 
         bool handleLine(const std::string& line, std::ostream& out);
