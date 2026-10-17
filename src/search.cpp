@@ -92,6 +92,7 @@ namespace ironphoenix {
     void SearchEngine::start(Position position, SearchLimits limits, std::ostream& out) {
         stopAndWait();
         stopRequested_.store(false, std::memory_order_relaxed);
+        ponderHitRequested_.store(false, std::memory_order_relaxed);
         searching_.store(true, std::memory_order_relaxed);
         tt_.newGeneration();
 
@@ -113,31 +114,95 @@ namespace ironphoenix {
         searching_.store(false, std::memory_order_relaxed);
     }
 
+    void SearchEngine::ponderHit() noexcept {
+        ponderHitRequested_.store(true, std::memory_order_relaxed);
+    }
+
     std::int64_t SearchEngine::elapsedMs() const noexcept {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime_).count();
     }
 
-    std::int64_t SearchEngine::calculateTimeBudget(const Position& pos, const SearchLimits& limits) const noexcept {
-        if (limits.movetimeMs > 0)
-            return limits.movetimeMs;
+    std::int64_t SearchEngine::budgetElapsedMs() const noexcept {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - budgetStartTime_).count();
+    }
+
+    SearchEngine::TimeBudget SearchEngine::calculateTimeBudget(
+        const Position& pos,
+        const SearchLimits& limits) const noexcept {
+
+        TimeBudget budget{};
+
+        if (limits.movetimeMs > 0) {
+            const std::int64_t fixed = std::max<std::int64_t>(1, limits.movetimeMs);
+            budget.minimumMs = fixed;
+            budget.softMs = fixed;
+            budget.hardMs = fixed;
+            return budget;
+        }
 
         if (!limits.hasClock)
-            return 0;
+            return budget;
 
         const unsigned c = static_cast<unsigned>(pos.sideToMove());
         const std::int64_t remaining = std::max<std::int64_t>(0, limits.timeMs[c]);
         const std::int64_t increment = std::max<std::int64_t>(0, limits.incrementMs[c]);
         const std::int64_t delay = std::max<std::int64_t>(0, limits.delayMs[c]);
+        const std::int64_t overhead = std::min(
+            remaining,
+            std::max<std::int64_t>(0, limits.moveOverheadMs));
+        const std::int64_t usable = std::max<std::int64_t>(0, remaining - overhead);
+        const std::int64_t clockCap = delay + usable;
 
-        std::int64_t budget = delay + remaining / 30 + (increment * 3) / 4;
-        const std::int64_t cap = delay + std::max<std::int64_t>(1, remaining / 2);
-        budget = std::min(budget, cap);
+        if (clockCap <= 0) {
+            budget.minimumMs = 1;
+            budget.softMs = 1;
+            budget.hardMs = 1;
+            return budget;
+        }
 
-        if (remaining > 20)
-            budget = std::min(budget, delay + remaining - 10);
+        // In 4PC a player only moves once per four plies, but each seat still
+        // owns its own clock. Budget by that player's remaining moves rather than
+        // by raw ply count. Increment is sustainable spend; delay is effectively
+        // free thinking time before the clock starts decreasing.
+        constexpr std::int64_t EXPECTED_REMAINING_MOVES = 32;
+        const std::int64_t baseShare = usable / EXPECTED_REMAINING_MOVES;
 
-        return std::max<std::int64_t>(1, budget);
+        budget.minimumMs = std::max(
+            delay,
+            std::min(increment, usable));
+        budget.minimumMs = std::clamp<std::int64_t>(budget.minimumMs, 1, clockCap);
+
+        budget.softMs = delay + baseShare + increment;
+        budget.softMs = std::clamp(budget.softMs, budget.minimumMs, clockCap);
+
+        // The hard limit protects the clock inside a deep iteration. Unstable
+        // root choices may use more than the soft target, but never more than
+        // roughly half of the usable clock or twice the normal target.
+        const std::int64_t halfClockCap = delay + usable / 2;
+        const std::int64_t adaptiveCap = std::max(budget.softMs, halfClockCap);
+        budget.hardMs = std::min(clockCap, std::min(budget.softMs * 2, adaptiveCap));
+        budget.hardMs = std::max(budget.hardMs, budget.softMs);
+
+        return budget;
+    }
+
+    void SearchEngine::processPonderHit() noexcept {
+        if (!pondering_) {
+            ponderHitRequested_.store(false, std::memory_order_relaxed);
+            return;
+        }
+
+        if (!ponderHitRequested_.exchange(false, std::memory_order_relaxed))
+            return;
+
+        // Ponder time belongs to the opponent. Start our actual move budget from
+        // the hit so a successful ponder still gets a normal increment/delay-aware
+        // search window instead of immediately returning.
+        pondering_ = false;
+        budgetStartTime_ = std::chrono::steady_clock::now();
+        nextTimeCheckNode_ = nodes_;
     }
 
     bool SearchEngine::shouldStop() noexcept {
@@ -149,18 +214,51 @@ namespace ironphoenix {
             return true;
         }
 
+        processPonderHit();
+
         // steady_clock::now() is surprisingly expensive when called several
-        // times per searched move. Poll the clock periodically by node count;
-        // explicit root checks still enforce the budget between iterations.
-        if (timeBudgetMs_ > 0 && nodes_ >= nextTimeCheckNode_) {
+        // times per searched move. Poll the hard clock periodically by node
+        // count; soft time is checked only between completed root iterations.
+        if (!pondering_ && hardTimeBudgetMs_ > 0 && nodes_ >= nextTimeCheckNode_) {
             nextTimeCheckNode_ = nodes_ + TIME_CHECK_NODE_INTERVAL;
-            if (elapsedMs() >= timeBudgetMs_) {
+            if (budgetElapsedMs() >= hardTimeBudgetMs_) {
                 stopRequested_.store(true, std::memory_order_relaxed);
                 return true;
             }
         }
 
         return false;
+    }
+
+    bool SearchEngine::iterationTimeExpired(
+        int stableDepths,
+        bool bestMoveChanged,
+        int scoreDelta) noexcept {
+
+        processPonderHit();
+
+        if (pondering_ || softTimeBudgetMs_ <= 0)
+            return false;
+
+        int scalePercent = 100;
+
+        // A changing PV is a useful uncertainty signal in 4PC's large tactical
+        // root. Stable best moves let us bank time; instability spends more.
+        if (bestMoveChanged)
+            scalePercent += 35;
+        else if (stableDepths >= 4)
+            scalePercent -= 25;
+        else if (stableDepths >= 2)
+            scalePercent -= 15;
+
+        if (scoreDelta >= 150)
+            scalePercent += 20;
+        else if (scoreDelta >= 75)
+            scalePercent += 10;
+
+        std::int64_t target = (softTimeBudgetMs_ * scalePercent) / 100;
+        target = std::clamp(target, minimumTimeBudgetMs_, hardTimeBudgetMs_);
+        return budgetElapsedMs() >= target;
     }
 
     int SearchEngine::evaluate(const Position& pos) const noexcept {
@@ -853,15 +951,23 @@ namespace ironphoenix {
         out.flush();
     }
 
-    void SearchEngine::emitBestMove(std::ostream& out, Move move) {
+    void SearchEngine::emitBestMove(std::ostream& out, Move move, Move ponderMove) {
         std::lock_guard lock(outputMutex_);
-        out << "bestmove " << (move ? moveToString(move) : "0000") << '\n';
+        out << "bestmove " << (move ? moveToString(move) : "0000");
+        if (move && limits_.ponderEnabled && ponderMove)
+            out << " ponder " << moveToString(ponderMove);
+        out << '\n';
         out.flush();
     }
 
     void SearchEngine::run(Position position, std::ostream& out) {
         startTime_ = std::chrono::steady_clock::now();
-        timeBudgetMs_ = calculateTimeBudget(position, limits_);
+        budgetStartTime_ = startTime_;
+        const TimeBudget timeBudget = calculateTimeBudget(position, limits_);
+        minimumTimeBudgetMs_ = timeBudget.minimumMs;
+        softTimeBudgetMs_ = timeBudget.softMs;
+        hardTimeBudgetMs_ = timeBudget.hardMs;
+        pondering_ = limits_.ponder;
         nodes_ = 0;
         nextTimeCheckNode_ = 0;
         selDepth_ = 0;
@@ -873,10 +979,15 @@ namespace ironphoenix {
         MoveList rootLegal;
         generateLegalMoves(position, rootLegal);
         Move bestMove = rootLegal.size ? rootLegal.moves[0] : Move{};
+        Move bestPonderMove{};
+        Move previousBestMove{};
+        int previousBestScore = 0;
+        bool havePreviousIteration = false;
+        int stableBestDepths = 0;
         int bestScore = 0;
 
         if (rootLegal.size == 0) {
-            emitBestMove(out, Move{});
+            emitBestMove(out, Move{}, Move{});
             return;
         }
 
@@ -888,7 +999,7 @@ namespace ironphoenix {
             if (requestedDepth > 0 && depth > requestedDepth)
                 break;
 
-            if (!limits_.infinite && requestedDepth == 0 && limits_.nodes == 0
+            if (!limits_.infinite && !limits_.ponder && requestedDepth == 0 && limits_.nodes == 0
                 && limits_.movetimeMs == 0 && !limits_.hasClock && depth > 8)
                 break;
 
@@ -1008,9 +1119,27 @@ namespace ironphoenix {
             if (shouldStop())
                 break;
 
+            bool bestMoveChanged = false;
+            int scoreDelta = 0;
+
             if (pvLength_[0] > 0 && pv_[0][0]) {
                 bestMove = pv_[0][0];
+                bestPonderMove = pvLength_[0] > 1 ? pv_[0][1] : Move{};
                 bestScore = score;
+
+                bestMoveChanged = havePreviousIteration && bestMove != previousBestMove;
+                if (havePreviousIteration && !bestMoveChanged)
+                    ++stableBestDepths;
+                else
+                    stableBestDepths = 0;
+
+                scoreDelta = havePreviousIteration
+                    ? std::max(previousBestScore - bestScore, bestScore - previousBestScore)
+                    : 0;
+
+                previousBestMove = bestMove;
+                previousBestScore = bestScore;
+                havePreviousIteration = true;
 
                 emitInfo(
                     out,
@@ -1025,7 +1154,7 @@ namespace ironphoenix {
                 break;
             if (limits_.nodes > 0 && nodes_ >= limits_.nodes)
                 break;
-            if (timeBudgetMs_ > 0 && elapsedMs() >= timeBudgetMs_)
+            if (iterationTimeExpired(stableBestDepths, bestMoveChanged, scoreDelta))
                 break;
 
             if (depth < MAX_PLY - 1)
@@ -1034,7 +1163,7 @@ namespace ironphoenix {
                 break;
         }
 
-        emitBestMove(out, bestMove);
+        emitBestMove(out, bestMove, bestPonderMove);
     }
 
 }
