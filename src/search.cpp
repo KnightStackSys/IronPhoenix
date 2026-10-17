@@ -177,9 +177,59 @@ namespace ironphoenix {
         budget.softMs = delay + baseShare + increment;
         budget.softMs = std::clamp(budget.softMs, budget.minimumMs, clockCap);
 
+        // Fischer-increment recovery mode. When the clock has fallen to only a
+        // handful of increments, allow stable/obvious positions to finish below
+        // the increment so the engine can actually rebuild clock time. The normal
+        // iterative-deepening stability logic still expands the target when the
+        // best move changes or the score is volatile, so difficult positions can
+        // spend more when necessary.
+        //
+        // Example with a 10-second increment:
+        //   <= 2 increments left: target about 5.5s
+        //   <= 4 increments left: target about 7.0s
+        //   <= 8 increments left: target about 8.5s
+        // Stable PVs can stop earlier; unstable PVs may expand toward the hard cap.
+        if (increment > 0 && delay == 0) {
+            int gainTargetPercent = 0;
+            int minimumPercent = 0;
+
+            if (usable <= increment * 2) {
+                gainTargetPercent = 55;
+                minimumPercent = 20;
+            }
+            else if (usable <= increment * 4) {
+                gainTargetPercent = 70;
+                minimumPercent = 25;
+            }
+            else if (usable <= increment * 8) {
+                gainTargetPercent = 85;
+                minimumPercent = 35;
+            }
+
+            if (gainTargetPercent > 0) {
+                const std::int64_t recoveryMinimum = std::max<std::int64_t>(
+                    1,
+                    (increment * minimumPercent) / 100);
+                budget.minimumMs = std::clamp<std::int64_t>(
+                    recoveryMinimum,
+                    1,
+                    clockCap);
+
+                const std::int64_t recoverySoft = std::max(
+                    budget.minimumMs,
+                    (increment * gainTargetPercent) / 100);
+                budget.softMs = std::clamp<std::int64_t>(
+                    recoverySoft,
+                    budget.minimumMs,
+                    clockCap);
+            }
+        }
+
         // The hard limit protects the clock inside a deep iteration. Unstable
         // root choices may use more than the soft target, but never more than
-        // roughly half of the usable clock or twice the normal target.
+        // roughly half of the usable clock or twice the current target. In
+        // recovery mode this gives volatile positions permission to exceed the
+        // increment while still making stable moves quickly enough to gain time.
         const std::int64_t halfClockCap = delay + usable / 2;
         const std::int64_t adaptiveCap = std::max(budget.softMs, halfClockCap);
         budget.hardMs = std::min(clockCap, std::min(budget.softMs * 2, adaptiveCap));
