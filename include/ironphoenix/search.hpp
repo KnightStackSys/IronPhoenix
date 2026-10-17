@@ -26,6 +26,9 @@ namespace ironphoenix {
         std::uint64_t nodes = 0;
         std::int64_t movetimeMs = 0;
         bool infinite = false;
+        bool ponder = false;
+        bool ponderEnabled = false;
+        std::int64_t moveOverheadMs = 50;
 
         bool hasClock = false;
         std::array<std::int64_t, COLOR_NB> timeMs{};
@@ -51,6 +54,7 @@ namespace ironphoenix {
 
         void stop() noexcept;
         void stopAndWait() noexcept;
+        void ponderHit() noexcept;
 
         [[nodiscard]] bool searching() const noexcept { return searching_.load(std::memory_order_relaxed); }
 
@@ -60,6 +64,12 @@ namespace ironphoenix {
         void newGame() noexcept;
 
     private:
+        struct TimeBudget final {
+            std::int64_t minimumMs = 0;
+            std::int64_t softMs = 0;
+            std::int64_t hardMs = 0;
+        };
+
         static constexpr int MAX_PLY = 128;
         static constexpr int INF = 32000;
         static constexpr int MATE_SCORE = 30000;
@@ -71,10 +81,15 @@ namespace ironphoenix {
         std::thread worker_;
         std::atomic<bool> stopRequested_{ false };
         std::atomic<bool> searching_{ false };
+        std::atomic<bool> ponderHitRequested_{ false };
 
         SearchLimits limits_{};
         std::chrono::steady_clock::time_point startTime_{};
-        std::int64_t timeBudgetMs_ = 0;
+        std::chrono::steady_clock::time_point budgetStartTime_{};
+        std::int64_t minimumTimeBudgetMs_ = 0;
+        std::int64_t softTimeBudgetMs_ = 0;
+        std::int64_t hardTimeBudgetMs_ = 0;
+        bool pondering_ = false;
         std::uint64_t nodes_ = 0;
         std::uint64_t nextTimeCheckNode_ = 0;
         int selDepth_ = 0;
@@ -108,8 +123,11 @@ namespace ironphoenix {
             const Position& pos) noexcept;
 
         [[nodiscard]] bool shouldStop() noexcept;
+        [[nodiscard]] bool iterationTimeExpired(int stableDepths, bool bestMoveChanged, int scoreDelta) noexcept;
+        void processPonderHit() noexcept;
         [[nodiscard]] std::int64_t elapsedMs() const noexcept;
-        [[nodiscard]] std::int64_t calculateTimeBudget(const Position& pos, const SearchLimits& limits) const noexcept;
+        [[nodiscard]] std::int64_t budgetElapsedMs() const noexcept;
+        [[nodiscard]] TimeBudget calculateTimeBudget(const Position& pos, const SearchLimits& limits) const noexcept;
 
         void emitInfo(
             std::ostream& out,
@@ -129,7 +147,7 @@ namespace ironphoenix {
             int pvLength
         );
 
-        void emitBestMove(std::ostream& out, Move move);
+        void emitBestMove(std::ostream& out, Move move, Move ponderMove = Move{});
     };
 
 }

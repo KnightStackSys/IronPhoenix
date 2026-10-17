@@ -115,6 +115,19 @@ namespace ironphoenix {
             }
         }
 
+        bool parseBoolean(std::string_view s, bool& value) noexcept {
+            s = trim(s);
+            if (iequals(s, "true") || iequals(s, "on") || s == "1") {
+                value = true;
+                return true;
+            }
+            if (iequals(s, "false") || iequals(s, "off") || s == "0") {
+                value = false;
+                return true;
+            }
+            return false;
+        }
+
         Direction kingSideDirection(Color c) noexcept {
             switch (c) {
             case RED:    return EAST;
@@ -242,6 +255,8 @@ namespace ironphoenix {
             "  setoption name Setup value <Modern|Classic|BY|BYG|RG|Custom>\n"
             "  setoption name StartFEN value <FEN4>\n"
             "  setoption name MultiPV value <1..32>\n"
+            "  setoption name Ponder value <true|false>\n"
+            "  setoption name Move Overhead value <0..5000>\n"
             "  setoption name EvalFile value <path-to-.nnue>\n"
             "  setoption name UseNNUE value <true|false>\n"
             "  setoption name ReloadNNUE    - reload the current EvalFile\n"
@@ -261,6 +276,8 @@ namespace ironphoenix {
             "  go infinite                 - search until stop (infinate also accepted)\n"
             "  go time <r> <b> <y> <g> increments <r> <b> <y> <g>\n"
             "          delays <r> <b> <y> <g>   - four-player clocks in milliseconds\n"
+            "  go ponder ...               - ponder until ponderhit/stop when enabled\n"
+            "  ponderhit                   - convert active ponder into timed search\n"
             "  stop                        - stop the active search\n"
             "  perfttest                   - built-in movegen/FEN smoke suite\n"
             "  key                         - print Zobrist key\n"
@@ -355,6 +372,30 @@ namespace ironphoenix {
             }
             multiPV_ = static_cast<int>(value);
             out << "info string MultiPV set to " << multiPV_ << '\n';
+            return true;
+        }
+
+        constexpr std::string_view ponderPrefix = "name Ponder value ";
+        if (startsWith(args, ponderPrefix)) {
+            bool value = false;
+            if (!parseBoolean(args.substr(ponderPrefix.size()), value)) {
+                out << "info string Ponder must be true or false\n";
+                return false;
+            }
+            ponder_ = value;
+            out << "info string Ponder " << (ponder_ ? "enabled" : "disabled") << '\n';
+            return true;
+        }
+
+        constexpr std::string_view overheadPrefix = "name Move Overhead value ";
+        if (startsWith(args, overheadPrefix)) {
+            std::int64_t value = 0;
+            if (!parseNonNegative64(trim(args.substr(overheadPrefix.size())), value) || value > 5000) {
+                out << "info string Move Overhead must be between 0 and 5000 ms\n";
+                return false;
+            }
+            moveOverheadMs_ = value;
+            out << "info string Move Overhead set to " << moveOverheadMs_ << " ms\n";
             return true;
         }
 
@@ -530,6 +571,9 @@ namespace ironphoenix {
         }
 
         SearchLimits limits;
+        limits.ponderEnabled = ponder_;
+        limits.moveOverheadMs = moveOverheadMs_;
+
         std::istringstream input{ std::string(args) };
         std::string token;
 
@@ -572,6 +616,12 @@ namespace ironphoenix {
             }
             else if (token == "infinite" || token == "infinate") {
                 limits.infinite = true;
+            }
+            else if (token == "ponder") {
+                if (ponder_)
+                    limits.ponder = true;
+                else
+                    out << "info string go ponder ignored because Ponder is disabled\n";
             }
             else if (token == "time") {
                 if (!readClockArray(limits.timeMs)) {
@@ -617,6 +667,8 @@ namespace ironphoenix {
                 << "option name StartFEN type string default <none>\n"
                 << "option name Hash type spin default 64 min 1 max 4096\n"
                 << "option name MultiPV type spin default 1 min 1 max " << SearchEngine::MAX_MULTI_PV << "\n"
+                << "option name Ponder type check default false\n"
+                << "option name Move Overhead type spin default 50 min 0 max 5000\n"
                 << "option name EvalFile type string default " << nnueFile_ << "\n"
                 << "option name UseNNUE type check default " << (useNNUE_ ? "true" : "false") << "\n"
                 << "option name ReloadNNUE type button\n"
@@ -655,6 +707,9 @@ namespace ironphoenix {
         }
         else if (line == "go") {
             handleGo({}, out);
+        }
+        else if (line == "ponderhit") {
+            search_.ponderHit();
         }
         else if (line == "d") {
             printBoard(out);
