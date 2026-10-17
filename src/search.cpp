@@ -450,7 +450,6 @@ namespace ironphoenix {
 
         const int originalAlpha = alpha;
         const bool inCheckNode = pos.inCheck();
-        const auto& tuning = Tuning::search();
 
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
@@ -495,8 +494,9 @@ namespace ironphoenix {
         //
         // 4PC is tactically volatile, so this is deliberately restricted to
         // non-PV nodes and disabled for checks on either allied king, mate-score
-        // windows, promotions, checking moves, and immediate king captures.
+        // windows, the TT move, promotions, checking moves, and immediate king captures.
         if (!inCheckNode && !pvNode) {
+            const auto& tuning = Tuning::search();
             const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
             const Color partner = static_cast<Color>(
                 static_cast<unsigned>(pos.sideToMove()) ^ 2u);
@@ -512,7 +512,8 @@ namespace ironphoenix {
                 bool hasForcingTactic = false;
 
                 for (Move move : moves) {
-                    if ((move.isCapture() && isTerminalKingCapture(pos, move))
+                    if (move == ttMove
+                        || (move.isCapture() && isTerminalKingCapture(pos, move))
                         || move.isPromotion()
                         || pos.givesCheck(move)) {
                         hasForcingTactic = true;
