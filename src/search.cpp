@@ -24,9 +24,6 @@ namespace ironphoenix {
         constexpr int IID_MIN_DEPTH = 7;
         constexpr int IID_REDUCTION = 3;
 
-        constexpr int IID_MIN_DEPTH = 7;
-        constexpr int IID_REDUCTION = 3;
-
         // History Move Pruning (HMP): only prune very poorly scoring quiet
         // moves at shallow non-PV nodes. The threshold becomes more conservative
         // with depth because deeper nodes deserve more tactical coverage.
@@ -673,36 +670,6 @@ namespace ironphoenix {
         const auto& tuning = Tuning::search();
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
-
-        // Internal Iterative Deepening (IID): when a deep PV node has no TT move,
-        // run one shallower search only to seed move ordering. The full search that
-        // follows keeps the original depth; unlike IIR, IID does not reduce it.
-        // The thread-local guard prevents IID searches from recursively starting
-        // more IID searches inside their own subtree.
-        static thread_local bool iidSearchActive = false;
-        if (!iidSearchActive
-            && pvNode
-            && ply > 0
-            && depth >= IID_MIN_DEPTH
-            && !inCheckNode
-            && !ttMove
-            && !mateWindow) {
-
-            iidSearchActive = true;
-            (void)negamax(pos, depth - IID_REDUCTION, alpha, beta, ply, true);
-            iidSearchActive = false;
-
-            if (shouldStop())
-                return 0;
-
-            TTProbe iidProbe;
-            if (tt_.probe(pos.key(), ply, iidProbe))
-                ttMove = iidProbe.move;
-
-            // Discard the shallower PV. The full-depth search below owns this
-            // node's principal variation.
-            pvLength_[ply] = ply;
-        }
 
         // Null Move Pruning (NMP): keep expensive partner-check detection and
         // static evaluation completely off nodes where NMP cannot run anyway.
