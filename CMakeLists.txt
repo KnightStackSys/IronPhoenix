@@ -175,7 +175,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_property PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_property COMMAND ironphoenix_property)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property PROPERTIES
+    add_executable(ironphoenix_lmr tests/lmr.cpp)
+    target_link_libraries(ironphoenix_lmr PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_lmr PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_lmr COMMAND ironphoenix_lmr)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_lmr PROPERTIES
         FOLDER "Tests"
     )
 endif()
@@ -186,3 +191,4 @@ if(IRONPHOENIX_BUILD_BENCHMARK)
     target_compile_features(ironphoenix_bench PRIVATE cxx_std_20)
     set_target_properties(ironphoenix_bench PROPERTIES FOLDER "Benchmarks")
 endif()
+

@@ -517,6 +517,9 @@ namespace ironphoenix {
         const auto& tuning = Tuning::search();
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
+        const Color lmrPartner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
+        const bool lmrTeamInCheck = inCheckNode
+            || (depth >= std::max(3, tuning.lmrMinDepth) && pos.inCheck(lmrPartner));
 
         // Null Move Pruning (NMP): keep expensive partner-check detection and
         // static evaluation completely off nodes where NMP cannot run anyway.
@@ -700,16 +703,29 @@ namespace ironphoenix {
                     }
                     else {
 
-                        const bool lmrEligible = depth >= 2 && legalMoves >= 2 && quiet;
+                        const bool lmrEligible = quiet
+                            && !lmrTeamInCheck
+                            && !givesCheckMove
+                            && !moveMateWindow
+                            && move != ttMove
+                            && !move.isCastle();
 
                         int reduction = 0;
 
                         if (lmrEligible) {
-                            reduction = lmrBaseReduction(depth, legalMoves);
+                            reduction = lmrQuietReduction(depth, legalMoves, pvNode, lmrHistoryScore);
 
-                            // Reduction adjustments go here!
-
-                            reduction = std::clamp(reduction, 0, depth - 2);
+                            // givesCheck() tests the mover's pieces. A quiet can
+                            // also uncover the partner's attack on either enemy
+                            // king, or expose our partner to a king capture.
+                            // Inspect the resulting board before reducing it.
+                            if (reduction > 0) {
+                                const Color otherEnemy = static_cast<Color>(
+                                    static_cast<unsigned>(pos.sideToMove()) ^ 2u);
+                                if (pos.inCheck() || pos.inCheck(otherEnemy)
+                                    || pos.inCheck(lmrPartner))
+                                    reduction = 0;
+                            }
                         }
 
                         if (reduction > 0) {
@@ -1038,3 +1054,4 @@ namespace ironphoenix {
     }
 
 }
+

@@ -216,9 +216,9 @@ namespace ironphoenix::Tuning {
             << "option name SearchCounterMoveBonus type spin default 32000 min 0 max 50000000\n"
             << "option name SearchCheckMoveBonus type spin default 10000000 min 0 max 50000000\n"
             << "option name SearchLMRMinDepth type spin default 3 min 1 max 32\n"
-            << "option name SearchLMRFullMoves type spin default 3 min 0 max 128\n"
+            << "option name SearchLMRFullMoves type spin default 2 min 0 max 128\n"
             << "option name SearchLMRBaseX100 type spin default 75 min 0 max 1000\n"
-            << "option name SearchLMRDivisorX100 type spin default 275 min 25 max 5000\n"
+            << "option name SearchLMRDivisorX100 type spin default 225 min 25 max 5000\n"
             << "option name EvalPawnValue type spin default 100 min 0 max 5000\n"
             << "option name EvalKnightValue type spin default 300 min 0 max 5000\n"
             << "option name EvalBishopValue type spin default 400 min 0 max 5000\n"
@@ -260,3 +260,4 @@ namespace ironphoenix::Tuning {
     }
 
 } // namespace ironphoenix::Tuning
+

@@ -49,4 +49,21 @@ namespace ironphoenix {
         lmrReduction = buildLmrReductionTable();
     }
 
+    int lmrQuietReduction(int depth, int moveCount, bool pvNode, int historyScore) noexcept {
+        const auto& params = Tuning::search();
+        // Keep the eligibility gates ahead of every adjustment, including when
+        // tuning disables reductions for early moves or shallow depths.
+        if (depth < std::max(3, params.lmrMinDepth)
+            || moveCount <= std::max(1, params.lmrFullMoves))
+            return 0;
+
+        int reduction = lmrBaseReduction(depth, moveCount);
+        reduction += pvNode ? -1 : 1;
+        // Poor history earns up to two extra plies; reliable quiets and
+        // countermoves recover up to two. Zero history remains neutral.
+        reduction -= std::clamp(historyScore / 8000, -2, 2);
+        return std::clamp(reduction, 0, depth - 2);
+    }
+
 }
+
