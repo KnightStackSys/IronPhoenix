@@ -12,7 +12,10 @@ namespace ironphoenix {
         std::array<std::array<std::uint8_t, LMR_MAX_MOVES + 1>,
         LMR_MAX_DEPTH + 1>;
 
-    extern const LmrReductionTable lmrReduction;
+    // The table is rebuilt whenever an LMR tuning parameter changes.
+    extern LmrReductionTable lmrReduction;
+
+    void rebuildLmrReductionTable() noexcept;
 
     inline int lmrBaseReduction(int depth, int moveCount) noexcept {
         if (depth <= 0 || moveCount <= 0)

@@ -16,12 +16,14 @@ enum class TTBound : std::uint8_t {
 };
 
 struct TTProbe {
-    bool hit = false;
-    Move move{};
-    int score = 0;
-    int depth = -1;
-    TTBound bound = TTBound::None;
-    bool pvNode = false;
+    // Probe fills every field on a hit. On a miss callers use the returned bool
+    // and must not inspect this object, so leave plain local instances untouched.
+    bool hit;
+    Move move;
+    int score;
+    int depth;
+    TTBound bound;
+    bool pvNode;
 };
 
 class TranspositionTable {
