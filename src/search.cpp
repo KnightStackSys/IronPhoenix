@@ -855,7 +855,11 @@ namespace ironphoenix {
                         if (lmrEligible) {
                             reduction = lmrBaseReduction(depth, legalMoves);
 
-                            // Reduction adjustments go here!
+                            // If the TT move is tactical, reduce competing late quiet
+                            // moves one extra ply. The TT move itself cannot reach this
+                            // path because LMR is only applied to quiet moves here.
+                            if (ttMove && ttMove.isCapture())
+                                ++reduction;
 
                             reduction = std::clamp(reduction, 0, depth - 2);
                         }
