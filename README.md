@@ -1,277 +1,261 @@
-<p align="center">
+<div align="center">
   <img src="bin/iron-phoenix.png" alt="Iron Phoenix logo" width="700">
-</p>
 
-**IronPhoenix** is a high-performance **4-player chess Teams engine** written in modern C++20.
+  <h1>🔥 IronPhoenix</h1>
 
-It is built around the chess.com-style 4PC cross board, team-aware search, fast move generation, handcrafted evaluation, and **PhoenixNet**, a purpose-built NNUE evaluator for four-player Teams chess.
+  <p><strong>IronPhoenix</strong> is a high-performance <strong>4-player chess Teams engine</strong> written in modern C++20.</p>
 
----
+  <p>It is built around the chess.com-style 4PC cross board, team-aware search, fast move generation, handcrafted evaluation, and <strong>PhoenixNet</strong>, a purpose-built NNUE evaluator for four-player Teams chess.</p>
 
-## ♟️ What IronPhoenix Plays
+  <hr>
 
-IronPhoenix is designed for **4-player Teams chess**:
+  <h2>♟️ What IronPhoenix Plays</h2>
 
-- **Red + Yellow** vs **Blue + Green**
-- Turn order: **Red → Blue → Yellow → Green**
-- 14×14 cross-shaped board
-- 160 playable squares
-- Team-aware king safety and terminal king-capture handling
-- Four-player castling, promotion, en-passant, and move-generation rules
-- Four-player FEN parsing and position setup
+  <p>IronPhoenix is designed for <strong>4-player Teams chess</strong>:</p>
 
-The engine evaluates positions from the **side-to-move team perspective**: positive scores favor the team whose player is currently moving.
+  <p>
+    <strong>Red + Yellow</strong> vs <strong>Blue + Green</strong><br>
+    Turn order: <strong>Red → Blue → Yellow → Green</strong><br>
+    14×14 cross-shaped board<br>
+    160 playable squares<br>
+    Team-aware king safety and terminal king-capture handling<br>
+    Four-player castling, promotion, en-passant, and move-generation rules<br>
+    Four-player FEN parsing and position setup
+  </p>
 
----
+  <p>The engine evaluates positions from the <strong>side-to-move team perspective</strong>: positive scores favor the team whose player is currently moving.</p>
 
-## ⚡ Engine Features
+  <hr>
 
-### 🔎 Search
+  <h2>⚡ Engine Features</h2>
 
-IronPhoenix includes a modern alpha-beta search stack designed specifically for four-player Teams chess:
+  <h3>🔎 Search</h3>
 
-- Negamax / PVS-style search
-- Quiescence search
-- Aspiration Windows
-- Transposition tables
-- History-based move ordering
-- Static Exchange Evaluation (SEE)
-- Late Move Reductions (LMR)
-- Late Move Pruning (LMP)
-- Null Move Pruning (NMP)
-- History Move Pruning (HMP)
-- Search pruning and reductions
-- Iterative deepening
-- Principal variation reporting
-- Time / depth search limits
-- MultiPV root search
+  <p>IronPhoenix includes a modern alpha-beta search stack designed specifically for four-player Teams chess:</p>
 
-`MultiPV=1` keeps the normal single-PV search path. Higher values use the dedicated MultiPV root search.
+  <p>
+    Negamax / PVS-style search<br>
+    Quiescence search<br>
+    Aspiration Windows<br>
+    Transposition tables<br>
+    History-based move ordering<br>
+    Static Exchange Evaluation (SEE)<br>
+    Late Move Reductions (LMR)<br>
+    Late Move Pruning (LMP)<br>
+    Null Move Pruning (NMP)<br>
+    History Move Pruning (HMP)<br>
+    Search pruning and reductions<br>
+    Iterative deepening<br>
+    Principal variation reporting<br>
+    Time / depth search limits<br>
+    MultiPV root search
+  </p>
 
-```text
-setoption name MultiPV value 4
-go depth 8
-```
+  <p><code>MultiPV=1</code> keeps the normal single-PV search path. Higher values use the dedicated MultiPV root search.</p>
 
----
+  <pre><code>setoption name MultiPV value 4
+go depth 8</code></pre>
 
-## 🧮 Evaluation
+  <hr>
 
-IronPhoenix supports two evaluation paths.
+  <h2>🧮 Evaluation</h2>
 
-### 🛠️ Handcrafted Evaluation
+  <p>IronPhoenix supports two evaluation paths.</p>
 
-The HCE currently provides the engine's deterministic fallback and PhoenixNet teacher foundation, including:
+  <h3>🛠️ Handcrafted Evaluation</h3>
 
-- Material
-- Mobility
-- Team-relative scoring
+  <p>The HCE currently provides the engine's deterministic fallback and PhoenixNet teacher foundation, including:</p>
 
-### 🧠 PhoenixNet NNUE
+  <p>
+    Material<br>
+    Mobility<br>
+    Team-relative scoring
+  </p>
 
-**PhoenixNet** is IronPhoenix's native neural evaluator.
+  <h3>🧠 PhoenixNet NNUE</h3>
 
-Current PhoenixNet v1 architecture:
+  <p><strong>PhoenixNet</strong> is IronPhoenix's native neural evaluator.</p>
 
-- 65,280 sparse input features
-- 17 king buckets
-- 4 relative piece colors
-- 6 piece types
-- Own-king feature stream
-- Partner-king feature stream
-- 128-wide shared feature transformer
-- `256 → 32 → 32 → 1` dense network
-- Centipawn-like side-to-move-team output
+  <p>Current PhoenixNet v1 architecture:</p>
 
-If `ironphoenix.nnue` is available beside the executable, IronPhoenix loads it automatically. Otherwise it falls back to HCE.
+  <p>
+    65,280 sparse input features<br>
+    17 king buckets<br>
+    4 relative piece colors<br>
+    6 piece types<br>
+    Own-king feature stream<br>
+    Partner-king feature stream<br>
+    128-wide shared feature transformer<br>
+    <code>256 → 32 → 32 → 1</code> dense network<br>
+    Centipawn-like side-to-move-team output
+  </p>
 
-For the full PhoenixNet architecture, dataset format, training flow, export format, append/resume support, and generator options, see **[🧠 PhoenixNet NNUE documentation](nnue/README.md)**.
+  <p>If <code>ironphoenix.nnue</code> is available beside the executable, IronPhoenix loads it automatically. Otherwise it falls back to HCE.</p>
 
----
+  <p>For the full PhoenixNet architecture, dataset format, training flow, export format, append/resume support, and generator options, see <strong><a href="nnue/README.md">🧠 PhoenixNet NNUE documentation</a></strong>.</p>
 
-## 🏗️ Building IronPhoenix
+  <hr>
 
-### 📋 Requirements
+  <h2>🏗️ Building IronPhoenix</h2>
 
-- CMake **3.24+**
-- A C++20 compiler
-- Visual Studio / MSVC, Clang, or GCC
-- Threads support
+  <h3>📋 Requirements</h3>
 
-### 🪟 Windows / Visual Studio
+  <p>
+    CMake <strong>3.24+</strong><br>
+    A C++20 compiler<br>
+    Visual Studio / MSVC, Clang, or GCC<br>
+    Threads support
+  </p>
 
-From the project root:
+  <h3>🪟 Windows / Visual Studio</h3>
 
-```powershell
-cmake -S . -B build -DIRONPHOENIX_BUILD_DATASET_GENERATOR=ON
-cmake --build build --config Release
-```
+  <p>From the project root:</p>
 
-To build only the engine:
+  <pre><code>cmake -S . -B build -DIRONPHOENIX_BUILD_DATASET_GENERATOR=ON
+cmake --build build --config Release</code></pre>
 
-```powershell
-cmake --build build --config Release --target ironphoenix
-```
+  <p>To build only the engine:</p>
 
-To build only the PhoenixNet dataset generator:
+  <pre><code>cmake --build build --config Release --target ironphoenix</code></pre>
 
-```powershell
-cmake --build build --config Release --target ironphoenix_dataset
-```
+  <p>To build only the PhoenixNet dataset generator:</p>
 
-If you are using the Visual Studio CMake `x64-release` layout used during development:
+  <pre><code>cmake --build build --config Release --target ironphoenix_dataset</code></pre>
 
-```cmd
-cmake --build out\build\x64-release --target ironphoenix
-cmake --build out\build\x64-release --target ironphoenix_dataset
-```
+  <p>If you are using the Visual Studio CMake <code>x64-release</code> layout used during development:</p>
 
----
+  <pre><code>cmake --build out\build\x64-release --target ironphoenix
+cmake --build out\build\x64-release --target ironphoenix_dataset</code></pre>
 
-## ▶️ Running the Engine
+  <hr>
 
-Launch the engine executable and enter UCI-style commands:
+  <h2>▶️ Running the Engine</h2>
 
-```text
-uci
+  <p>Launch the engine executable and enter UCI-style commands:</p>
+
+  <pre><code>uci
 isready
 position startpos
-go depth 8
-```
+go depth 8</code></pre>
 
-Enable MultiPV:
+  <p>Enable MultiPV:</p>
 
-```text
-setoption name MultiPV value 4
+  <pre><code>setoption name MultiPV value 4
 position startpos
-go depth 8
-```
+go depth 8</code></pre>
 
-Useful engine options include:
+  <p>Useful engine options include:</p>
 
-```text
-setoption name Hash value 256
+  <pre><code>setoption name Hash value 256
 setoption name MultiPV value 4
-setoption name Clear Hash
-```
+setoption name Clear Hash</code></pre>
 
----
+  <hr>
 
-## 🧪 PhoenixNet Dataset Generation
+  <h2>🧪 PhoenixNet Dataset Generation</h2>
 
-The project builds a native dataset generator:
+  <p>The project builds a native dataset generator:</p>
 
-```text
-ironphoenix_dataset
-```
+  <pre><code>ironphoenix_dataset</code></pre>
 
-It generates self-play positions using the engine search as a teacher and stores the exact sparse features consumed by PhoenixNet.
+  <p>It generates self-play positions using the engine search as a teacher and stores the exact sparse features consumed by PhoenixNet.</p>
 
-### 🚀 Example dataset run
+  <h3>🚀 Example dataset run</h3>
 
-```cmd
-ironphoenix_dataset.exe --positions 500000 --depth 8 --workers 8 --hash 16 --random-plies 8 --skip-plies 12 --sample-every 3 --exploration 0.15 --exploration-multipv 4 --exploration-temperature 120 --exploration-max-loss 250 --dedup --output "..\..\..\nnue\phoenix-v1.ipd"
-```
+  <pre><code>ironphoenix_dataset.exe --positions 500000 --depth 8 --workers 8 --hash 16 --random-plies 8 --skip-plies 12 --sample-every 3 --exploration 0.15 --exploration-multipv 4 --exploration-temperature 120 --exploration-max-loss 250 --dedup --output "..\..\..\nnue\phoenix-v1.ipd"</code></pre>
 
-The generator supports:
+  <p>The generator supports:</p>
 
-- Parallel self-play workers
-- Controlled MultiPV exploration
-- Single-PV search for non-exploration positions
-- NNUE-feature deduplication
-- Randomized opening plies
-- Native compact `.ipd` datasets
-- Safe append mode
-- Resume-to-total mode
-- Graceful `Ctrl+C` stopping
-- Recovery of complete records from older interrupted runs
-- Progress reporting every 10 saved positions
+  <p>
+    Parallel self-play workers<br>
+    Controlled MultiPV exploration<br>
+    Single-PV search for non-exploration positions<br>
+    NNUE-feature deduplication<br>
+    Randomized opening plies<br>
+    Native compact <code>.ipd</code> datasets<br>
+    Safe append mode<br>
+    Resume-to-total mode<br>
+    Graceful <code>Ctrl+C</code> stopping<br>
+    Recovery of complete records from older interrupted runs<br>
+    Progress reporting every 10 saved positions
+  </p>
 
-### 🛑 Stop and resume safely
+  <h3>🛑 Stop and resume safely</h3>
 
-Press **Ctrl+C once**. The generator stops active searches, joins its workers, flushes records, and commits the current dataset count.
+  <p>Press <strong>Ctrl+C once</strong>. The generator stops active searches, joins its workers, flushes records, and commits the current dataset count.</p>
 
-Resume toward a total target:
+  <p>Resume toward a total target:</p>
 
-```cmd
-ironphoenix_dataset.exe --resume --positions 500000 --depth 8 --workers 8 --hash 16 --dedup --output "..\..\..\nnue\phoenix-v1.ipd"
-```
+  <pre><code>ironphoenix_dataset.exe --resume --positions 500000 --depth 8 --workers 8 --hash 16 --dedup --output "..\..\..\nnue\phoenix-v1.ipd"</code></pre>
 
-If the file already contains 50,000 positions, this produces only the remaining 450,000.
+  <p>If the file already contains 50,000 positions, this produces only the remaining 450,000.</p>
 
----
+  <hr>
 
-## 🏋️ Training PhoenixNet
+  <h2>🏋️ Training PhoenixNet</h2>
 
-Create a Python environment:
+  <p>Create a Python environment:</p>
 
-```powershell
-py -m venv nnue\.venv
+  <pre><code>py -m venv nnue\.venv
 .\nnue\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install torch numpy
-```
+pip install torch numpy</code></pre>
 
-Train:
+  <p>Train:</p>
 
-```powershell
-python nnue\train.py nnue\phoenix-v1.ipd `
+  <pre><code>python nnue\train.py nnue\phoenix-v1.ipd `
     --epochs 20 `
     --batch-size 1024 `
     --lr 0.001 `
-    -o nnue\phoenixnet-v1.pt
-```
+    -o nnue\phoenixnet-v1.pt</code></pre>
 
-Export to the native IronPhoenix NNUE format:
+  <p>Export to the native IronPhoenix NNUE format:</p>
 
-```powershell
-python nnue\export.py nnue\phoenixnet-v1.pt `
+  <pre><code>python nnue\export.py nnue\phoenixnet-v1.pt `
     -o ironphoenix.nnue `
-    --output-scale 400
-```
+    --output-scale 400</code></pre>
 
-Place `ironphoenix.nnue` beside `ironphoenix.exe` and start the engine. A successful load prints:
+  <p>Place <code>ironphoenix.nnue</code> beside <code>ironphoenix.exe</code> and start the engine. A successful load prints:</p>
 
-```text
-PhoenixNet loaded: ironphoenix.nnue
-```
+  <pre><code>PhoenixNet loaded: ironphoenix.nnue</code></pre>
 
----
+  <hr>
 
-## 📁 Project Layout
+  <h2>📁 Project Layout</h2>
 
-```text
-IronPhoenix/
+  <pre><code>IronPhoenix/
 ├── include/ironphoenix/     # Public engine headers
 ├── src/                     # Engine implementation
 ├── tools/                   # Dataset generation tools
 ├── tests/                   # Correctness tests and benchmarks
 ├── nnue/                    # PhoenixNet model, trainer, exporter, docs
 ├── CMakeLists.txt           # Build configuration
-└── README.md                # Project overview
-```
+└── README.md                # Project overview</code></pre>
 
----
+  <hr>
 
-## 🧭 Development Direction
+  <h2>🧭 Development Direction</h2>
 
-IronPhoenix is under active development. Current and planned work includes:
+  <p>IronPhoenix is under active development. Current and planned work includes:</p>
 
-- Stronger handcrafted evaluation terms
-- Larger and more diverse PhoenixNet datasets
-- Incremental NNUE accumulators
-- Quantized NNUE weights
-- SIMD / AVX2 inference
-- Search tuning and SPRT testing
-- Opening-book / explorer integration
-- Continued search-performance work
+  <p>
+    Stronger handcrafted evaluation terms<br>
+    Larger and more diverse PhoenixNet datasets<br>
+    Incremental NNUE accumulators<br>
+    Quantized NNUE weights<br>
+    SIMD / AVX2 inference<br>
+    Search tuning and SPRT testing<br>
+    Opening-book / explorer integration<br>
+    Continued search-performance work
+  </p>
 
-PhoenixNet v1 intentionally keeps a straightforward full-refresh inference path as a correctness baseline before aggressive optimization.
+  <p>PhoenixNet v1 intentionally keeps a straightforward full-refresh inference path as a correctness baseline before aggressive optimization.</p>
 
----
+  <hr>
 
-## ❤️ Author
+  <h2>❤️ Author</h2>
 
-**IronPhoenix** is developed by **Nick / KnightStackSys** as a dedicated high-performance engine for 4-player Teams chess.
+  <p><strong>IronPhoenix</strong> is developed by <strong>Nick / KnightStackSys</strong> as a dedicated high-performance engine for 4-player Teams chess.</p>
 
-🔥 **Build. Search. Learn. Rise.**
+  <p>🔥 <strong>Build. Search. Learn. Rise.</strong></p>
+</div>
