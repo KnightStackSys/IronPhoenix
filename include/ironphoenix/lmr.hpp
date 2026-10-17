@@ -17,6 +17,10 @@ namespace ironphoenix {
 
     void rebuildLmrReductionTable() noexcept;
 
+    // Caller protects tactical moves and checked kings. History includes quiet
+    // and continuation scores plus the countermove bonus, but never TT scores.
+    int lmrQuietReduction(int depth, int moveCount, bool pvNode, int historyScore) noexcept;
+
     inline int lmrBaseReduction(int depth, int moveCount) noexcept {
         if (depth <= 0 || moveCount <= 0)
             return 0;
@@ -31,3 +35,4 @@ namespace ironphoenix {
     }
 
 }
+

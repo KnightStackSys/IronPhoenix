@@ -19,9 +19,9 @@ namespace ironphoenix {
             int counterMoveBonus = 32'000;
             int checkMoveBonus = 10'000'000;
             int lmrMinDepth = 3;
-            int lmrFullMoves = 3;
+            int lmrFullMoves = 2;
             int lmrBaseX100 = 75;
-            int lmrDivisorX100 = 275;
+            int lmrDivisorX100 = 225;
         };
 
         struct EvalParameters final {
@@ -55,3 +55,4 @@ namespace ironphoenix {
     } // namespace Tuning
 
 } // namespace ironphoenix
+
