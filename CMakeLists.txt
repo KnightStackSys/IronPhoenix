@@ -32,6 +32,7 @@ add_library(ironphoenix_core STATIC
     src/preft.cpp
     src/uci.cpp
     include/ironphoenix/eval.hpp
+    include/ironphoenix/search_stack.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
     include/ironphoenix/tuning.hpp
@@ -175,7 +176,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_property PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_property COMMAND ironphoenix_property)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property PROPERTIES
+    add_executable(ironphoenix_search_stack tests/search_stack.cpp)
+    target_link_libraries(ironphoenix_search_stack PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_search_stack PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_search_stack COMMAND ironphoenix_search_stack)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack PROPERTIES
         FOLDER "Tests"
     )
 endif()
