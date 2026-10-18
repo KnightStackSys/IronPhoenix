@@ -1,6 +1,7 @@
 #pragma once
 
 #include "history.hpp"
+#include "search_stack.hpp"
 #include "position.hpp"
 #include "tt.hpp"
 
@@ -96,7 +97,7 @@ namespace ironphoenix {
 
         std::array<std::array<Move, MAX_PLY>, MAX_PLY> pv_{};
         std::array<int, MAX_PLY> pvLength_{};
-        std::array<HistoryContext, MAX_PLY> searchStack_{};
+        std::array<SearchStackEntry, MAX_PLY> searchStack_{};
         mutable std::mutex outputMutex_;
 
         void run(Position position, std::ostream& out);
@@ -105,6 +106,7 @@ namespace ironphoenix {
         int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull = true);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
+        void recordStackEvaluation(int ply, int score) noexcept;
         int moveScore(const Position& pos, Move move, Move ttMove, int ply, bool givesCheck) const noexcept;
         void orderMoves(const Position& pos,
                         Move* begin,
