@@ -34,6 +34,7 @@ namespace ironphoenix {
             int bishopMobility = 4;
             int rookMobility = 2;
             int queenMobility = 1;
+            int queenInfiltration = 2;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;
