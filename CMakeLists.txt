@@ -181,7 +181,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_search_stack PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_search_stack COMMAND ironphoenix_search_stack)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack PROPERTIES
+    add_executable(ironphoenix_mate_stop tests/mate_stop.cpp)
+    target_link_libraries(ironphoenix_mate_stop PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_mate_stop PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_mate_stop COMMAND ironphoenix_mate_stop)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop PROPERTIES
         FOLDER "Tests"
     )
 endif()

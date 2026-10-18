@@ -311,6 +311,16 @@ namespace ironphoenix {
         return budgetElapsedMs() >= target;
     }
 
+    bool SearchEngine::shouldStopOnWinningMate(int score, Move rootMove) const noexcept {
+        // Only a completed root search with an actual move and a positive
+        // mate score may terminate iterative deepening. A losing mate should
+        // keep searching for defenses and for ways to delay defeat.
+        // UCI infinite analysis and active pondering must wait for stop /
+        // ponderhit respectively, even when a mate is available.
+        return !limits_.infinite && !pondering_ && static_cast<bool>(rootMove)
+            && score >= MATE_THRESHOLD && score <= MATE_SCORE;
+    }
+
     int SearchEngine::evaluate(const Position& pos) const noexcept {
         return Eval::evaluate(pos);
     }
@@ -1238,6 +1248,12 @@ namespace ironphoenix {
                     pv_[0].data(),
                     pvLength_[0]
                 );
+
+                // This is a completed root iteration (not an aspiration bound).
+                // Return the proven winning mate immediately; do not spend
+                // additional time deepening an already decisive move.
+                if (shouldStopOnWinningMate(bestScore, bestMove))
+                    break;
             }
 
             if (requestedDepth > 0 && depth == requestedDepth)
