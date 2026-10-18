@@ -18,6 +18,12 @@ namespace ironphoenix {
 
         constexpr int LMP_HISTORY_THRESHOLD = 2'000;
 
+        // Internal Iterative Deepening (IID) is used only to obtain a move-ordering
+        // hint when a deep PV node has no TT move. The reduced search is deliberately
+        // several plies shallower to keep the extra work reasonable in 4PC.
+        constexpr int IID_MIN_DEPTH = 9;
+        constexpr int IID_REDUCTION = 4;
+
         // History Move Pruning (HMP): only prune very poorly scoring quiet
         // moves at shallow non-PV nodes. The threshold becomes more conservative
         // with depth because deeper nodes deserve more tactical coverage.
@@ -37,7 +43,6 @@ namespace ironphoenix {
             Move move;
             bool givesCheck;
         };
-
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
@@ -645,7 +650,7 @@ namespace ironphoenix {
         const int originalAlpha = alpha;
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
-        const Move ttMove = ttHit ? ttProbe.move : Move{};
+        Move ttMove = ttHit ? ttProbe.move : Move{};
 
         // Transposition Table (TT) Cutoffs: if the current position has been
         // previously searched at a depth equal to or greater than the current
@@ -710,22 +715,48 @@ namespace ironphoenix {
             }
         }
 
+        // Internal Iterative Deepening (IID): at a deep non-root PV node with
+        // no TT move, search a reduced depth to obtain a move-ordering hint.
+        // Unlike IIR, the actual PV search below retains the original depth.
+        // The thread-local guard prevents recursive IID probes.
+        static thread_local bool iidSearchActive = false;
+        if (!iidSearchActive
+            && pvNode
+            && ply > 0
+            && depth >= IID_MIN_DEPTH
+            && !inCheckNode
+            && !ttMove
+            && !mateWindow) {
+
+            iidSearchActive = true;
+            (void)negamax(pos, depth - IID_REDUCTION, alpha, beta, ply, true);
+            iidSearchActive = false;
+
+            if (shouldStop())
+                return 0;
+
+            TTProbe iidProbe;
+            if (tt_.probe(pos.key(), ply, iidProbe))
+                ttMove = iidProbe.move;
+
+            // A preliminary search can alter the node's PV. Rebuild it during
+            // the full-depth search, rather than leaking the shallow PV.
+            pvLength_[ply] = ply;
+        }
+
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
 
         std::array<int, MAX_MOVES> orderedScores;
-        std::array<std::uint64_t, CHECK_BIT_WORDS> givesCheckBits;
-
         if (pvNode) {
-            // PV nodes are comparatively rare and benefit from complete ordering.
-            // Keep their existing full sort and cached check metadata.
+            // PV nodes require full ordering, but pruning check flags and
+            // orderedScores are only used by non-PV pruning. Avoid checking
+            // captures/promotions or populating metadata that PV never reads.
             orderMoves(pos,
                 moves.begin(),
                 moves.end(),
                 ttMove,
-                ply,
-                orderedScores.data(),
-                givesCheckBits.data());
+                ply);
         }
         else {
             // At cut nodes avoid sorting the entire move list and avoid eager
@@ -769,11 +800,8 @@ namespace ironphoenix {
             const Move move = moves.moves[moveIndex];
             const Piece movingPiece = pos.pieceAt(move.from());
             const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
-            const bool givesCheckMove = pvNode
-                ? cachedGivesCheck(givesCheckBits.data(), moveIndex)
-                : (!terminalKingCapture && pos.givesCheck(move));
             const bool quiet = !move.isCapture() && !move.isPromotion();
-            const int lmrHistoryScore = quiet ? orderedScores[moveIndex] : 0;
+            const int lmrHistoryScore = (!pvNode && quiet) ? orderedScores[moveIndex] : 0;
 
             int score = -INF;
             bool legal = true;
@@ -781,49 +809,36 @@ namespace ironphoenix {
             const bool moveMateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
-            // Late Move Pruning (LMP): at non-PV nodes, stop spending search
-            // effort on late quiet moves unless history says the move is
-            // promising. Checks, TT moves, promotions/captures, and mate-window
-            // searches are never pruned here. This intentionally has no depth cap.
-            if (!pvNode
-                && !inCheckNode
+            // Checking whether a pseudo-legal move gives check is expensive
+            // on the large 4PC board. Only compute it if the move would
+            // otherwise be pruned by LMP, HMP, or SEE. PV nodes, evasions,
+            // the TT move, and moves outside all pruning thresholds do not
+            // need this information.
+            const bool canPrune = !pvNode && !inCheckNode
+                && !moveMateWindow && move != ttMove;
+            const bool lmpCandidate = canPrune && quiet
                 && legalMoves >= 3 + depth * depth
-                && quiet
-                && move != ttMove
-                && !givesCheckMove
-                && !moveMateWindow
-                && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
-                continue;
-            }
-
-            // History Move Pruning (HMP): prune quiet moves with strongly negative
-            // accumulated history before they consume a search. Keep it shallow,
-            // protect the first legal move, and never prune tactical/special moves.
-            if (!pvNode
-                && !inCheckNode
-                && depth <= HISTORY_MOVE_PRUNE_MAX_DEPTH
-                && legalMoves > 0
-                && quiet
-                && move != ttMove
-                && !givesCheckMove
-                && !moveMateWindow
-                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth) {
-                continue;
-            }
-
-            // Static Exchange Evaluation (SEE) Pruning: at non-PV nodes, if a
-            // capture move is likely to lose material, skip it. This is only done
-            // at shallow depths, since SEE is not always accurate in complex positions.
-            // SEE pruning is not applied to TT moves, promotions, checks, or mate-window searches.
-            if (!pvNode
-                && !inCheckNode
+                && lmrHistoryScore < LMP_HISTORY_THRESHOLD;
+            const bool hmpCandidate = canPrune && quiet
+                && legalMoves > 0 && depth <= HISTORY_MOVE_PRUNE_MAX_DEPTH
+                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth;
+            const bool seeCandidate = canPrune && legalMoves > 0
                 && depth <= tuning.seePruneMaxDepth
-                && legalMoves > 0
-                && move.isCapture()
-                && !move.isPromotion()
-                && move != ttMove
-                && !givesCheckMove
-                && !moveMateWindow) {
+                && move.isCapture() && !move.isPromotion();
+
+            const bool givesCheckMove = (lmpCandidate || hmpCandidate || seeCandidate)
+                && !terminalKingCapture && pos.givesCheck(move);
+
+            // Late Move Pruning (LMP): never prune checking moves.
+            if (lmpCandidate && !givesCheckMove)
+                continue;
+
+            // History Move Pruning (HMP): never prune checking moves.
+            if (hmpCandidate && !givesCheckMove)
+                continue;
+
+            // SEE Pruning: only inspect losing captures if there is no check.
+            if (seeCandidate && !givesCheckMove) {
                 const int seeThreshold = -tuning.seePruneMarginPerDepth * depth;
                 if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
                     continue;
