@@ -181,6 +181,10 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_search_stack PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_search_stack COMMAND ironphoenix_search_stack)
 
+    add_executable(ironphoenix_reverse_futility tests/reverse_futility.cpp)
+    target_link_libraries(ironphoenix_reverse_futility PRIVATE IronPhoenix::Core)
+    add_test(NAME ironphoenix_reverse_futility COMMAND ironphoenix_reverse_futility)
+
     set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack PROPERTIES
         FOLDER "Tests"
     )

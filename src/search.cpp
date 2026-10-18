@@ -26,6 +26,8 @@ namespace ironphoenix {
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
+        constexpr int REVERSE_FUTILITY_MAX_DEPTH = 4;
+        constexpr int REVERSE_FUTILITY_MARGIN_PER_DEPTH = 200;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
 
         // Non-PV nodes normally cut off quickly. Selecting only the strongest
@@ -650,6 +652,49 @@ namespace ironphoenix {
         return bestScore;
     }
 
+    bool SearchEngine::reverseFutilitySafe(Position& pos) const {
+        // This heuristic assumes the full alternating Teams turn cycle. Do not
+        // infer anything about positions with missing/eliminated players.
+        if (pos.aliveMask() != 0xF)
+            return false;
+        for (unsigned c = 0; c < COLOR_NB; ++c) {
+            const Color color = static_cast<Color>(c);
+            // Check either allied king (including the partner who cannot move
+            // yet), and enemy kings so immediate terminal captures are searched.
+            if (pos.kingSquare(color) == SQ_NONE || pos.inCheck(color))
+                return false;
+            auto pawns = pos.pieces(color, PAWN);
+            while (pawns) {
+                const Square from = popLsb(pawns);
+                const Square to = Geometry::step(from, Geometry::pawnForward(color));
+                // Deliberately conservative even if blocked: promotion by any
+                // seat during the next cycle makes a static cutoff unreliable.
+                if (to != SQ_NONE && Geometry::isPromotionSquare(color, to))
+                    return false;
+            }
+        }
+
+        // A static surplus must not turn stalemate into a win or hide a forced
+        // move. Stop after two legal witnesses rather than building a full list.
+        MoveList moves;
+        generatePseudoLegalMoves(pos, moves);
+        const Color us = pos.sideToMove();
+        int legal = 0;
+        for (Move move : moves) {
+            if (isTerminalKingCapture(pos, move) || move.isPromotion())
+                return false;
+        }
+        for (Move move : moves) {
+            StateInfo state;
+            pos.makeMove(move, state);
+            const bool valid = !pos.inCheck(us);
+            pos.undoMove(move, state);
+            if (valid && ++legal == 2)
+                return true;
+        }
+        return false;
+    }
+
     int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
@@ -700,8 +745,26 @@ namespace ironphoenix {
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
-        // Null Move Pruning (NMP): keep expensive partner-check detection and
-        // static evaluation completely off nodes where NMP cannot run anyway.
+        // RFP estimates a fail-high in the side-to-move TEAM's perspective,
+        // exactly as evaluate() does. Never negate for the partner. Keep this
+        // out of null-move child nodes, root/PV nodes, checks and mate windows.
+        if (allowNull && !pvNode && ply > 0
+            && depth <= REVERSE_FUTILITY_MAX_DEPTH
+            && !inCheckNode && !mateWindow
+            && hasNonPawnMaterial(pos, us)) {
+            const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
+            if (!pos.inCheck(partner)) {
+                const int staticEval = evaluate(pos);
+                recordStackEvaluation(ply, staticEval);
+                const int estimate = staticEval - REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth;
+                if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD
+                    && estimate >= beta && reverseFutilitySafe(pos))
+                    return estimate;
+            }
+        }
+
+        // Null Move Pruning (NMP): reuse the stack's raw evaluation when RFP
+        // already evaluated this node. The existing NMP policy is unchanged.
         if (allowNull
             && !pvNode
             && ply > 0
@@ -712,7 +775,7 @@ namespace ironphoenix {
 
             const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
             if (!pos.inCheck(partner)) {
-                const int staticEval = evaluate(pos);
+                const int staticEval = ss.staticEvalValid ? ss.staticEval : evaluate(pos);
                 recordStackEvaluation(ply, staticEval);
 
                 if (staticEval >= beta) {

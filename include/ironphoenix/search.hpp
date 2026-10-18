@@ -65,6 +65,8 @@ namespace ironphoenix {
         void newGame() noexcept;
 
     private:
+        friend struct ReverseFutilityTestAccess;
+        [[nodiscard]] bool reverseFutilitySafe(Position& pos) const;
         struct TimeBudget final {
             std::int64_t minimumMs = 0;
             std::int64_t softMs = 0;
