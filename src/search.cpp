@@ -353,16 +353,16 @@ namespace ironphoenix {
 
         int score = history_.quietScore(mover, move);
 
-        if (ply > 0 && searchStack_[ply].valid()) {
-            score += history_.continuationScore(ContinuationKind::PreviousPly, searchStack_[ply], movingPiece, move.to());
+        if (ply > 0 && searchStack_[ply].history.valid()) {
+            score += history_.continuationScore(ContinuationKind::PreviousPly, searchStack_[ply].history, movingPiece, move.to());
 
-            if (history_.counterMove(mover, searchStack_[ply]) == move)
+            if (history_.counterMove(mover, searchStack_[ply].history) == move)
                 score += tuning.counterMoveBonus;
         }
 
-        if (ply >= 4 && searchStack_[ply - 3].valid()
-            && searchStack_[ply - 3].mover == mover) {
-            score += (history_.continuationScore(ContinuationKind::SamePlayer, searchStack_[ply - 3], movingPiece, move.to()) * 3) / 4;
+        if (ply >= 4 && searchStack_[ply - 3].history.valid()
+            && searchStack_[ply - 3].history.mover == mover) {
+            score += (history_.continuationScore(ContinuationKind::SamePlayer, searchStack_[ply - 3].history, movingPiece, move.to()) * 3) / 4;
         }
 
         if (givesCheck)
@@ -430,14 +430,14 @@ namespace ironphoenix {
 
         history_.updateQuiet(mover, cutoffMove, bonus);
 
-        if (ply > 0 && searchStack_[ply].valid()) {
-            history_.updateContinuation(ContinuationKind::PreviousPly, searchStack_[ply], movingPiece, cutoffMove.to(), bonus);
-            history_.setCounterMove(mover, searchStack_[ply], cutoffMove);
+        if (ply > 0 && searchStack_[ply].history.valid()) {
+            history_.updateContinuation(ContinuationKind::PreviousPly, searchStack_[ply].history, movingPiece, cutoffMove.to(), bonus);
+            history_.setCounterMove(mover, searchStack_[ply].history, cutoffMove);
         }
 
-        if (ply >= 4 && searchStack_[ply - 3].valid()
-            && searchStack_[ply - 3].mover == mover) {
-            history_.updateContinuation(ContinuationKind::SamePlayer, searchStack_[ply - 3], movingPiece,
+        if (ply >= 4 && searchStack_[ply - 3].history.valid()
+            && searchStack_[ply - 3].history.mover == mover) {
+            history_.updateContinuation(ContinuationKind::SamePlayer, searchStack_[ply - 3].history, movingPiece,
                 cutoffMove.to(), (bonus * 3) / 4);
         }
 
@@ -448,12 +448,12 @@ namespace ironphoenix {
                 continue;
 
             history_.updateQuiet(mover, failed, penalty);
-            if (ply > 0 && searchStack_[ply].valid())
-                history_.updateContinuation(ContinuationKind::PreviousPly, searchStack_[ply], failedPiece, failed.to(), penalty);
+            if (ply > 0 && searchStack_[ply].history.valid())
+                history_.updateContinuation(ContinuationKind::PreviousPly, searchStack_[ply].history, failedPiece, failed.to(), penalty);
 
-            if (ply >= 4 && searchStack_[ply - 3].valid()
-                && searchStack_[ply - 3].mover == mover) {
-                history_.updateContinuation(ContinuationKind::SamePlayer, searchStack_[ply - 3], failedPiece,
+            if (ply >= 4 && searchStack_[ply - 3].history.valid()
+                && searchStack_[ply - 3].history.mover == mover) {
+                history_.updateContinuation(ContinuationKind::SamePlayer, searchStack_[ply - 3].history, failedPiece,
                     failed.to(), (penalty * 3) / 4);
             }
         }
@@ -479,11 +479,32 @@ namespace ironphoenix {
         }
     }
 
+    void SearchEngine::recordStackEvaluation(int ply, int score) noexcept {
+        auto& current = searchStack_[ply];
+        const SearchStackEntry* earlier = nullptr;
+
+        // In 4PC the teammate generally moves two plies earlier, and the
+        // same player four plies earlier. Eliminations may skip colors.
+        // Only compare actual ancestors with the same team perspective.
+        for (int back = 2; back <= 6 && back <= ply; ++back) {
+            const auto& ancestor = searchStack_[ply - back];
+            if (ancestor.staticEvalValid
+                && teamOf(ancestor.sideToMove) == teamOf(current.sideToMove)) {
+                earlier = &ancestor;
+                break;
+            }
+        }
+        current.recordStaticEval(score, earlier);
+    }
+
     int SearchEngine::qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
             return 0;
+
+        auto& ss = searchStack_[ply];
+        ss.beginNode(pos.sideToMove(), 0, pvNode);
 
         ++nodes_;
         selDepth_ = std::max(selDepth_, ply);
@@ -500,10 +521,12 @@ namespace ironphoenix {
 
         const int originalAlpha = alpha;
         const bool inCheckNode = pos.inCheck();
+        ss.inCheck = inCheckNode;
 
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
-        const Move ttMove = ttHit ? ttProbe.move : Move{};
+        ss.recordTT(ttProbe, ttHit);
+        const Move ttMove = ss.ttMove;
 
         if (!pvNode && ttHit && ttProbe.depth >= 0) {
             if (ttProbe.bound == TTBound::Exact)
@@ -519,6 +542,7 @@ namespace ironphoenix {
 
         if (!inCheckNode) {
             bestScore = evaluate(pos);
+            recordStackEvaluation(ply, bestScore);
 
             if (bestScore >= beta) {
                 tt_.store(pos.key(), 0, bestScore, TTBound::Lower, Move{}, pvNode, ply);
@@ -546,6 +570,7 @@ namespace ironphoenix {
         for (Move move : moves) {
             if (shouldStop())
                 break;
+            ss.currentMove = move;
 
             const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
 
@@ -564,7 +589,7 @@ namespace ironphoenix {
                     legal = false;
                 }
                 else {
-                    searchStack_[ply + 1] = HistoryContext{ move, pos.pieceAt(move.to()), us };
+                    searchStack_[ply + 1].history = HistoryContext{ move, pos.pieceAt(move.to()), us };
                     score = -qsearch(pos, -beta, -alpha, ply + 1, pvNode);
                 }
 
@@ -575,6 +600,7 @@ namespace ironphoenix {
                 continue;
 
             ++legalMoves;
+            ss.moveCount = legalMoves;
 
             if (shouldStop())
                 break;
@@ -582,6 +608,7 @@ namespace ironphoenix {
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
+                ss.bestMove = move;
             }
 
             if (score > alpha) {
@@ -608,8 +635,10 @@ namespace ironphoenix {
             return mateScore;
         }
 
-        if (bestScore == -INF)
+        if (bestScore == -INF) {
             bestScore = evaluate(pos);
+            recordStackEvaluation(ply, bestScore);
+        }
 
         TTBound bound = TTBound::Exact;
         if (bestScore <= originalAlpha)
@@ -630,6 +659,9 @@ namespace ironphoenix {
         if (depth <= 0)
             return qsearch(pos, alpha, beta, ply, pvNode);
 
+        auto& ss = searchStack_[ply];
+        ss.beginNode(pos.sideToMove(), depth, pvNode);
+
         ++nodes_;
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
@@ -645,7 +677,8 @@ namespace ironphoenix {
         const int originalAlpha = alpha;
         TTProbe ttProbe;
         const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
-        const Move ttMove = ttHit ? ttProbe.move : Move{};
+        ss.recordTT(ttProbe, ttHit);
+        const Move ttMove = ss.ttMove;
 
         // Transposition Table (TT) Cutoffs: if the current position has been
         // previously searched at a depth equal to or greater than the current
@@ -662,6 +695,7 @@ namespace ironphoenix {
         }
 
         const bool inCheckNode = pos.inCheck();
+        ss.inCheck = inCheckNode;
         const auto& tuning = Tuning::search();
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
@@ -679,11 +713,12 @@ namespace ironphoenix {
             const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
             if (!pos.inCheck(partner)) {
                 const int staticEval = evaluate(pos);
+                recordStackEvaluation(ply, staticEval);
 
                 if (staticEval >= beta) {
                     StateInfo nullState;
                     pos.makeNullMove(nullState);
-                    searchStack_[ply + 1] = HistoryContext{};
+                    searchStack_[ply + 1].history = HistoryContext{};
 
                     // Dynamic null-move reduction: reduce the depth more aggressively
                     // at deeper nodes and for higher static evaluations.
@@ -767,6 +802,7 @@ namespace ironphoenix {
             }
 
             const Move move = moves.moves[moveIndex];
+            ss.currentMove = move;
             const Piece movingPiece = pos.pieceAt(move.from());
             const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
             const bool givesCheckMove = pvNode
@@ -840,9 +876,10 @@ namespace ironphoenix {
                     legal = false;
                 }
                 else {
-                    searchStack_[ply + 1] = HistoryContext{ move, pos.pieceAt(move.to()), us };
+                    searchStack_[ply + 1].history = HistoryContext{ move, pos.pieceAt(move.to()), us };
 
                     ++legalMoves;
+                    ss.moveCount = legalMoves;
                     if (legalMoves == 1) {
                         score = -negamax(pos, depth - 1, -beta, -alpha, ply + 1, pvNode);
                     }
@@ -880,8 +917,10 @@ namespace ironphoenix {
 
             if (!legal)
                 continue;
-            if (terminalKingCapture)
+            if (terminalKingCapture) {
                 ++legalMoves;
+                ss.moveCount = legalMoves;
+            }
 
             if (shouldStop())
                 break;
@@ -889,6 +928,7 @@ namespace ironphoenix {
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
+                ss.bestMove = move;
             }
 
             bool cutoff = false;
@@ -1024,7 +1064,7 @@ namespace ironphoenix {
         for (auto& row : pv_)
             row.fill(Move{});
         pvLength_.fill(0);
-        searchStack_.fill(HistoryContext{});
+        searchStack_.fill(SearchStackEntry{});
 
         MoveList rootLegal;
         generateLegalMoves(position, rootLegal);
