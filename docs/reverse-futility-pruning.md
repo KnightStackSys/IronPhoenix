@@ -5,10 +5,14 @@ static evaluation minus a safety margin is already at least beta. This can
 save nodes in clearly favorable positions; it is a selective heuristic, not
 a proof of a minimax bound or of increased playing strength.
 
-The initial settings are depth 1–4 (plies, not full four-seat cycles) and
-200 evaluation units per remaining ply. The returned fail-high estimate is
-`staticEval - 200 * depth`, rather than the unadjusted static surplus.
-No exact TT entry or best move is manufactured by the cutoff.
+The aggressive experimental settings are **depth 1–6** (plies, not full
+four-seat cycles) and **130 evaluation units per remaining ply**. When a
+same-team ancestor provides a valid improving trend, the margin shrinks by
+`min(80, improvingRate / 3)` centipawns, never falling below 90 cp.
+No improvement comparison means no discount. The returned fail-high estimate
+is `staticEval - max(90, 130 * depth - improvingDiscount)`, rather than
+the unadjusted static surplus. No exact TT entry or best move is manufactured
+by the cutoff.
 
 RFP runs after mate-distance/TT cutoffs and before NMP and ordinary move
 search. Evaluation is already relative to the moving team's perspective:
@@ -29,11 +33,16 @@ Every witness make/undo restores the board and hash.
 
 These guards cost work on candidate cutoffs and do not eliminate all tactical
 or zugzwang errors. They leave NMP's existing policy and other pruning intact.
+The increased max depth and smaller margin intentionally trade tactical safety
+for more speculative cutoffs; no Elo gain is assumed. The improving discount
+only applies to team-relative, previously recorded evaluations; missing history
+does not imply improvement.
+
 Use CTest for deterministic guard/score/state regressions, then compare to
 the same main revision with identical compiler, network, hash, threads and
 opening suite. Run paired seat/team-swapped fixed-node and fixed-time games,
 inspect tactical losses and node/time/depth changes, and use a predeclared
-SPRT before claiming an Elo gain or tuning the depth/margin more aggressively.
+SPRT before claiming an Elo gain.
 
 The old experiment is PR #28 at branch tip
 `dcefe70131df6c83a69910e2edec39086e3efa7f`. Its RFP idea and initial constants

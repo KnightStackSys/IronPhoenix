@@ -26,8 +26,12 @@ namespace ironphoenix {
 
         constexpr int NULL_MOVE_MIN_DEPTH = 2;
         constexpr int NULL_MOVE_DIVISOR = 190;
-        constexpr int REVERSE_FUTILITY_MAX_DEPTH = 4;
-        constexpr int REVERSE_FUTILITY_MARGIN_PER_DEPTH = 200;
+        // More aggressive team-aware RFP experiment. Keep the established
+        // tactical / team-safety guards; adjust only depth and margins.
+        constexpr int REVERSE_FUTILITY_MAX_DEPTH = 6;
+        constexpr int REVERSE_FUTILITY_MARGIN_PER_DEPTH = 130;
+        constexpr int REVERSE_FUTILITY_MIN_MARGIN = 90;
+        constexpr int REVERSE_FUTILITY_MAX_IMPROVING_DISCOUNT = 80;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
 
         // Non-PV nodes normally cut off quickly. Selecting only the strongest
@@ -756,7 +760,17 @@ namespace ironphoenix {
             if (!pos.inCheck(partner)) {
                 const int staticEval = evaluate(pos);
                 recordStackEvaluation(ply, staticEval);
-                const int estimate = staticEval - REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth;
+                // Search-stack evaluations are already team-relative. If a
+                // comparable same-team ancestor shows the position improving,
+                // use a smaller margin; otherwise keep the base margin.
+                // The bounded discount never turns this into a zero-margin
+                // static-evaluation cutoff, even at depth one.
+                const int improvingDiscount = ss.improving
+                    ? std::min(REVERSE_FUTILITY_MAX_IMPROVING_DISCOUNT, ss.improvingRate / 3)
+                    : 0;
+                const int margin = std::max(REVERSE_FUTILITY_MIN_MARGIN,
+                    REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth - improvingDiscount);
+                const int estimate = staticEval - margin;
                 if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD
                     && estimate >= beta && reverseFutilitySafe(pos))
                     return estimate;

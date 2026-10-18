@@ -3,6 +3,7 @@
 #include "ironphoenix/movegen.hpp"
 #include <iostream>
 #include <memory>
+#include <limits>
 
 using namespace ironphoenix;
 
@@ -12,9 +13,15 @@ struct ReverseFutilityTestAccess {
         return engine.reverseFutilitySafe(pos);
     }
     static int search(SearchEngine& engine, Position& pos, int depth, int beta,
-                      int ply = 1, bool pv = false, bool allowNull = true) {
+                      int ply = 1, bool pv = false, bool allowNull = true,
+                      int ancestorEval = std::numeric_limits<int>::max()) {
         engine.tt_.clear();
         engine.searchStack_.fill(SearchStackEntry{});
+        if (ply >= 2 && ancestorEval != std::numeric_limits<int>::max()) {
+            auto& ancestor = engine.searchStack_[ply - 2];
+            ancestor.beginNode(pos.sideToMove(), depth + 2, false);
+            ancestor.recordStaticEval(ancestorEval);
+        }
         engine.stopRequested_.store(false);
         engine.nodes_ = 0;
         engine.limits_.nodes = 2000;
@@ -55,25 +62,46 @@ int main() {
         expect(Access::safe(*engine, pos), "quiet position eligible for every seat");
         expect(pos.key() == key && pos.verify(), "safety probe restores board and hash");
         const int eval = Eval::evaluate(pos);
-        for (int depth = 1; depth <= 4; ++depth) {
-            const int beta = eval - 200 * depth;
-            expect(Access::search(*engine, pos, depth, beta) == beta, "margin boundary returns adjusted score");
+        for (int depth = 1; depth <= 6; ++depth) {
+            const int beta = eval - 130 * depth;
+            expect(Access::search(*engine, pos, depth, beta) == beta, "aggressive margin boundary returns adjusted score");
             expect(Access::nodes(*engine) == 1, "RFP cuts before child search");
             expect(Access::stack(*engine).staticEvalValid && Access::stack(*engine).staticEval == eval,
                    "raw team evaluation recorded on search stack");
         }
-        Access::search(*engine, pos, 1, eval - 199);
+        Access::search(*engine, pos, 1, eval - 129);
         expect(Access::nodes(*engine) > 1, "insufficient margin searches children");
-        Access::search(*engine, pos, 1, eval - 200, 1, true);
+        Access::search(*engine, pos, 1, eval - 130, 1, true);
         expect(Access::nodes(*engine) > 1, "PV node excluded");
-        Access::search(*engine, pos, 1, eval - 200, 0);
+        Access::search(*engine, pos, 1, eval - 130, 0);
         expect(Access::nodes(*engine) > 1, "root excluded");
-        Access::search(*engine, pos, 1, eval - 200, 1, false, false);
+        Access::search(*engine, pos, 1, eval - 130, 1, false, false);
         expect(Access::nodes(*engine) > 1, "null subtree excluded");
         Access::search(*engine, pos, 1, -29000);
         expect(Access::nodes(*engine) > 1, "mate window excluded");
-        Access::search(*engine, pos, 5, eval - 1000);
-        expect(Access::nodes(*engine) > 1, "depth beyond four excluded");
+        Access::search(*engine, pos, 7, eval - 1000);
+        expect(Access::nodes(*engine) > 1, "depth beyond six excluded");
+        // At ply 3, +180 cp against a same-team ancestor discounts
+        // depth-3's 390 cp base margin by 60 cp (to 330 cp).
+        const int improvingBeta = eval - 330;
+        expect(Access::search(*engine, pos, 3, improvingBeta, 3, false, true, eval - 180)
+               == improvingBeta, "improving team can prune at reduced margin");
+        expect(Access::nodes(*engine) == 1, "improving team RFP searches no children");
+        expect(Access::stack(*engine).improving
+               && Access::stack(*engine).improvingRate == 180,
+               "improving rate populated from same-team ancestor");
+
+        // When the trend is flat or negative, preserve the base margin.
+        Access::search(*engine, pos, 3, improvingBeta, 3, false, true, eval + 100);
+        expect(Access::nodes(*engine) > 1, "worsening trend receives no discount");
+        expect(!Access::stack(*engine).improving, "worsening trend is not improving");
+
+        // Cap the discount at 80 cp, leaving a nonzero margin.
+        const int cappedBeta = eval - 310;
+        expect(Access::search(*engine, pos, 3, cappedBeta, 3, false, true, eval - 1000)
+               == cappedBeta, "improving discount is bounded");
+        expect(Access::nodes(*engine) == 1, "bounded improvement still enables RFP");
+
         expect(pos.key() == key && pos.verify(), "search restores board and hash");
     }
     {
@@ -83,7 +111,7 @@ int main() {
         expect(!pos.inCheck() && pos.inCheck(YELLOW), "partner-only check fixture");
         expect(!Access::safe(*engine, pos), "partner check excluded");
         const int eval = Eval::evaluate(pos);
-        Access::search(*engine, pos, 1, eval - 200);
+        Access::search(*engine, pos, 1, eval - 130);
         expect(Access::nodes(*engine) > 1, "partner check cannot RFP");
     }
     {
@@ -126,7 +154,7 @@ int main() {
         pos.finalizeSetup();
         expect(pos.inCheck(), "own check fixture");
         expect(!Access::safe(*engine, pos), "own check excluded");
-        Access::search(*engine, pos, 1, Eval::evaluate(pos) - 200);
+        Access::search(*engine, pos, 1, Eval::evaluate(pos) - 130);
         expect(Access::nodes(*engine) > 1, "own check cannot RFP");
     }
     {
