@@ -1,3 +1,4 @@
+#include "ironphoenix/eval.hpp"
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/see.hpp"
@@ -16,6 +17,26 @@ static void putKings(Position& p) {
     p.placePiece(sq('a', 7), makePiece(BLUE, KING));
     p.placePiece(sq('g', 14), makePiece(YELLOW, KING));
     p.placePiece(sq('n', 7), makePiece(GREEN, KING));
+}
+
+// Measure only the new queen term, holding material and mobility constant.
+static int queenInfiltrationDelta(Color queenColor, char file, int rank, bool threatened = false) {
+    Position p;
+    p.clear();
+    putKings(p);
+    p.placePiece(sq(file, rank), makePiece(queenColor, QUEEN));
+    if (threatened)
+        p.placePiece(sq('d', 9), makePiece(BLUE, ROOK));
+
+    p.setSideToMove(queenColor);
+    p.finalizeSetup();
+
+    auto& params = Eval::parameters();
+    const int saved = params.queenInfiltration;
+    params.queenInfiltration = 0;
+    const int baseline = Eval::evaluate(p);
+    params.queenInfiltration = saved;
+    return Eval::evaluate(p) - baseline;
 }
 
 int main() {
@@ -98,6 +119,21 @@ int main() {
     assert(Geometry::isPromotionSquare(BLUE, sq('k', 7)));
     assert(Geometry::isPromotionSquare(YELLOW, sq('g', 4)));
     assert(Geometry::isPromotionSquare(GREEN, sq('d', 7)));
+
+    // All four orientations must reward a safe queen penetrating an enemy
+    // camp near the enemy king, from the perspective of the queen's team.
+    assert(queenInfiltrationDelta(RED, 'd', 7) > 0);     // Blue home edge
+    assert(queenInfiltrationDelta(YELLOW, 'k', 7) > 0);  // Green home edge
+    assert(queenInfiltrationDelta(BLUE, 'g', 4) > 0);    // Red home edge
+    assert(queenInfiltrationDelta(GREEN, 'g', 11) > 0);  // Yellow home edge
+
+    // No reward for own/allied territory or an enemy-attacked queen.
+    assert(queenInfiltrationDelta(RED, 'g', 4) == 0);
+    assert(queenInfiltrationDelta(RED, 'g', 11) == 0);
+    assert(queenInfiltrationDelta(RED, 'd', 7, true) == 0);
+    assert(Tuning::setEvalParameter("EvalQueenInfiltration", 0));
+    assert(queenInfiltrationDelta(RED, 'd', 7) == 0);
+    Tuning::resetEval();
 
     std::cout << "nexus_fast_board smoke tests: PASS\n";
     return 0;
