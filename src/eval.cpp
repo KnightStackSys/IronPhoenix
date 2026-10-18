@@ -5,6 +5,9 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+
 namespace ironphoenix::Eval {
 
     namespace {
@@ -92,9 +95,82 @@ namespace ironphoenix::Eval {
             return score;
         }
 
+        // Distance past the board's central boundary towards an enemy home edge.
+        // The four home edges rotate, so ordinary two-player rank advancement
+        // cannot describe queen infiltration on a cross-shaped 4PC board.
+        IRONPHOENIX_FORCE_INLINE int enemyCampDepth(Color enemyColor, int file, int rank) noexcept {
+            switch (enemyColor) {
+            case RED:    return 7 - rank;
+            case BLUE:   return 7 - file;
+            case YELLOW: return rank - 6;
+            case GREEN:  return file - 6;
+            }
+            return 0;
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool inHomeCamp(Color color, int file, int rank) noexcept {
+            switch (color) {
+            case RED:    return rank <= 2;
+            case BLUE:   return file <= 2;
+            case YELLOW: return rank >= 11;
+            case GREEN:  return file >= 11;
+            }
+            return false;
+        }
+
+        int queenInfiltrationForColor(const Position& pos, Color c) noexcept {
+            const int weight = Tuning::eval().queenInfiltration;
+            if (weight == 0)
+                return 0;
+
+            int score = 0;
+            Bitboard queens = pos.pieces(c, QUEEN);
+            const Bitboard occupancy = pos.occupancy();
+
+            while (queens) {
+                const Square sq = popLsb(queens);
+                const int file = static_cast<int>(Geometry::fileOf(sq));
+                const int rank = static_cast<int>(Geometry::rankOf(sq));
+
+                // Do not reward a queen that has not left its starting camp,
+                // or one that the opposing team can capture immediately.
+                if (inHomeCamp(c, file, rank)
+                    || pos.isAttackedByEnemy(sq, c, occupancy))
+                    continue;
+
+                for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                    const Color opponent = static_cast<Color>(ci);
+                    if (!enemy(c, opponent) || !pos.isAlive(opponent))
+                        continue;
+
+                    const Square king = pos.kingSquare(opponent);
+                    if (king == SQ_NONE)
+                        continue;
+
+                    // A shallow central queen is not an infiltration.
+                    const int depth = enemyCampDepth(opponent, file, rank);
+                    if (depth < 2)
+                        continue;
+
+                    const int kingFile = static_cast<int>(Geometry::fileOf(king));
+                    const int kingRank = static_cast<int>(Geometry::rankOf(king));
+                    const int distance = std::max(std::abs(file - kingFile), std::abs(rank - kingRank));
+                    if (distance > 6)
+                        continue;
+
+                    // More credit for penetrating deeper while staying close
+                    // enough to an enemy king to create threats.
+                    score += (depth - 1) * (7 - distance) * weight;
+                }
+            }
+
+            return score;
+        }
+
         int playerScore(const Position& pos, Color c) noexcept {
             return materialForColor(pos, c)
-                + mobilityForColor(pos, c);
+                + mobilityForColor(pos, c)
+                + queenInfiltrationForColor(pos, c);
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
