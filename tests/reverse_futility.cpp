@@ -28,7 +28,7 @@ struct ReverseFutilityTestAccess {
         return engine.negamax(pos, depth, beta - 1, beta, ply, pv, allowNull);
     }
     static std::uint64_t nodes(const SearchEngine& engine) { return engine.nodes_; }
-    static const SearchStackEntry& stack(const SearchEngine& engine) { return engine.searchStack_[1]; }
+    static const SearchStackEntry& stack(const SearchEngine& engine, int ply = 1) { return engine.searchStack_[ply]; }
 };
 }
 
@@ -87,14 +87,14 @@ int main() {
         expect(Access::search(*engine, pos, 3, improvingBeta, 3, false, true, eval - 180)
                == improvingBeta, "improving team can prune at reduced margin");
         expect(Access::nodes(*engine) == 1, "improving team RFP searches no children");
-        expect(Access::stack(*engine).improving
-               && Access::stack(*engine).improvingRate == 180,
+        expect(Access::stack(*engine, 3).improving
+               && Access::stack(*engine, 3).improvingRate == 180,
                "improving rate populated from same-team ancestor");
 
         // When the trend is flat or negative, preserve the base margin.
         Access::search(*engine, pos, 3, improvingBeta, 3, false, true, eval + 100);
         expect(Access::nodes(*engine) > 1, "worsening trend receives no discount");
-        expect(!Access::stack(*engine).improving, "worsening trend is not improving");
+        expect(!Access::stack(*engine, 3).improving, "worsening trend is not improving");
 
         // Cap the discount at 80 cp, leaving a nonzero margin.
         const int cappedBeta = eval - 310;
