@@ -120,20 +120,28 @@ int main() {
     assert(Geometry::isPromotionSquare(YELLOW, sq('g', 4)));
     assert(Geometry::isPromotionSquare(GREEN, sq('d', 7)));
 
-    // All four orientations must reward a safe queen penetrating an enemy
-    // camp near the enemy king, from the perspective of the queen's team.
-    assert(queenInfiltrationDelta(RED, 'd', 7) > 0);     // Blue home edge
-    assert(queenInfiltrationDelta(YELLOW, 'k', 7) > 0);  // Green home edge
-    assert(queenInfiltrationDelta(BLUE, 'g', 4) > 0);    // Red home edge
-    assert(queenInfiltrationDelta(GREEN, 'g', 11) > 0);  // Yellow home edge
+    // Do not hide these checks behind assert: CI runs Release with NDEBUG.
+    Tuning::resetEval();
+    const bool allOrientations =
+        queenInfiltrationDelta(RED, 'd', 7) > 0    // Blue home edge
+        && queenInfiltrationDelta(YELLOW, 'k', 7) > 0 // Green home edge
+        && queenInfiltrationDelta(BLUE, 'g', 4) > 0   // Red home edge
+        && queenInfiltrationDelta(GREEN, 'g', 11) > 0; // Yellow home edge
 
     // No reward for own/allied territory or an enemy-attacked queen.
-    assert(queenInfiltrationDelta(RED, 'g', 4) == 0);
-    assert(queenInfiltrationDelta(RED, 'g', 11) == 0);
-    assert(queenInfiltrationDelta(RED, 'd', 7, true) == 0);
-    assert(Tuning::setEvalParameter("EvalQueenInfiltration", 0));
-    assert(queenInfiltrationDelta(RED, 'd', 7) == 0);
+    const bool safeOnly =
+        queenInfiltrationDelta(RED, 'g', 4) == 0
+        && queenInfiltrationDelta(RED, 'g', 11) == 0
+        && queenInfiltrationDelta(RED, 'd', 7, true) == 0;
+
+    const bool tunable = Tuning::setEvalParameter("EvalQueenInfiltration", 0)
+        && queenInfiltrationDelta(RED, 'd', 7) == 0;
     Tuning::resetEval();
+
+    if (!allOrientations || !safeOnly || !tunable) {
+        std::cerr << "queen infiltration evaluation tests: FAIL\n";
+        return 1;
+    }
 
     std::cout << "nexus_fast_board smoke tests: PASS\n";
     return 0;
