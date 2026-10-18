@@ -115,7 +115,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
     for (auto& row : pv_)
         row.fill(Move{});
     pvLength_.fill(0);
-    searchStack_.fill(HistoryContext{});
+    searchStack_.fill(SearchStackEntry{});
 
     MoveList rootLegal;
     generateLegalMoves(position, rootLegal);
@@ -164,6 +164,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
         }
 
         selDepth_ = 0;
+        searchStack_[0].beginNode(position.sideToMove(), depth, true);
         std::vector<RootLine> current;
         current.reserve(rootLegal.size);
         bool completedDepth = true;
@@ -173,6 +174,8 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
                 completedDepth = false;
                 break;
             }
+            searchStack_[0].currentMove = move;
+            ++searchStack_[0].moveCount;
 
             RootLine line;
             line.move = move;
@@ -194,7 +197,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
                     continue;
                 }
 
-                searchStack_[1] = HistoryContext{
+                searchStack_[1].history = HistoryContext{
                     move,
                     position.pieceAt(move.to()),
                     mover
