@@ -671,35 +671,6 @@ namespace ironphoenix {
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
-        // Internal Iterative Deepening (IID): at a deep non-root PV node with
-        // no TT move, search a reduced depth to obtain a move-ordering hint.
-        // Unlike IIR, the actual PV search below retains the original depth.
-        // The thread-local guard prevents recursive IID probes.
-        static thread_local bool iidSearchActive = false;
-        if (!iidSearchActive
-            && pvNode
-            && ply > 0
-            && depth >= IID_MIN_DEPTH
-            && !inCheckNode
-            && !ttMove
-            && !mateWindow) {
-
-            iidSearchActive = true;
-            (void)negamax(pos, depth - IID_REDUCTION, alpha, beta, ply, true);
-            iidSearchActive = false;
-
-            if (shouldStop())
-                return 0;
-
-            TTProbe iidProbe;
-            if (tt_.probe(pos.key(), ply, iidProbe))
-                ttMove = iidProbe.move;
-
-            // A preliminary search can alter the node's PV. Rebuild it during
-            // the full-depth search, rather than leaking the shallow PV.
-            pvLength_[ply] = ply;
-        }
-
         // Null Move Pruning (NMP): keep expensive partner-check detection and
         // static evaluation completely off nodes where NMP cannot run anyway.
         if (allowNull
@@ -742,6 +713,35 @@ namespace ironphoenix {
                         return nullScore;
                 }
             }
+        }
+
+        // Internal Iterative Deepening (IID): at a deep non-root PV node with
+        // no TT move, search a reduced depth to obtain a move-ordering hint.
+        // Unlike IIR, the actual PV search below retains the original depth.
+        // The thread-local guard prevents recursive IID probes.
+        static thread_local bool iidSearchActive = false;
+        if (!iidSearchActive
+            && pvNode
+            && ply > 0
+            && depth >= IID_MIN_DEPTH
+            && !inCheckNode
+            && !ttMove
+            && !mateWindow) {
+
+            iidSearchActive = true;
+            (void)negamax(pos, depth - IID_REDUCTION, alpha, beta, ply, true);
+            iidSearchActive = false;
+
+            if (shouldStop())
+                return 0;
+
+            TTProbe iidProbe;
+            if (tt_.probe(pos.key(), ply, iidProbe))
+                ttMove = iidProbe.move;
+
+            // A preliminary search can alter the node's PV. Rebuild it during
+            // the full-depth search, rather than leaking the shallow PV.
+            pvLength_[ply] = ply;
         }
 
         MoveList moves;
