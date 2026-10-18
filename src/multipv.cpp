@@ -277,6 +277,11 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
             );
         }
 
+        // MultiPV must complete and report every requested line at this depth
+        // before exiting on a winning mate in the top-ranked line.
+        if (shouldStopOnWinningMate(bestScore, bestMove))
+            break;
+
         if (requestedDepth > 0 && depth == requestedDepth)
             break;
         if (limits_.nodes > 0 && nodes_ >= limits_.nodes)

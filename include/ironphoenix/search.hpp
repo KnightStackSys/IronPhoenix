@@ -65,6 +65,9 @@ namespace ironphoenix {
         void newGame() noexcept;
 
     private:
+        // Exposed only to the mate-stop regression test.
+        friend struct MateStopTestAccess;
+
         struct TimeBudget final {
             std::int64_t minimumMs = 0;
             std::int64_t softMs = 0;
@@ -126,6 +129,7 @@ namespace ironphoenix {
 
         [[nodiscard]] bool shouldStop() noexcept;
         [[nodiscard]] bool iterationTimeExpired(int stableDepths, bool bestMoveChanged, int scoreDelta) noexcept;
+        [[nodiscard]] bool shouldStopOnWinningMate(int score, Move rootMove) const noexcept;
         void processPonderHit() noexcept;
         [[nodiscard]] std::int64_t elapsedMs() const noexcept;
         [[nodiscard]] std::int64_t budgetElapsedMs() const noexcept;
