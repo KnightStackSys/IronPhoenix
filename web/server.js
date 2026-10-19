@@ -233,7 +233,10 @@ class EngineBridge {
   }
 
   async positionInternal({ fen = null, moves = [] }) {
-    if (fen !== null) parseFen4(fen);
+    if (fen !== null) {
+      try { parseFen4(fen); }
+      catch (err) { err.status = 400; throw err; }
+    }
     if (!Array.isArray(moves) || moves.length > 2000) throw Object.assign(new Error('Invalid move list.'), { status: 400 });
     const normalized = moves.map(move => normalizeMove(move));
     if (normalized.some(m => !m)) throw Object.assign(new Error('Moves must use 4PC coordinate notation.'), { status: 400 });
@@ -268,7 +271,9 @@ class EngineBridge {
   }
 
   async pgn(request) {
-    const parsed = parsePgn(request.text);
+    let parsed;
+    try { parsed = parsePgn(request.text); }
+    catch (err) { err.status = 400; throw err; }
     const result = await this.positionFrom({ fen: parsed.fen, moves: parsed.moves });
     return { ...result, tags: parsed.tags };
   }
