@@ -132,8 +132,6 @@ namespace ironphoenix::Eval {
 
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
-                if (!pos.isAlive(c))
-                    continue;
                 const int score = materialForColor(pos, c)
                     + mobilityForColor(pos, c, attacks[teamOf(c)]);
                 if (teamOf(c) == 0)
