@@ -186,7 +186,15 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_mate_stop PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_mate_stop COMMAND ironphoenix_mate_stop)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop PROPERTIES
+    add_executable(ironphoenix_reverse_futility tests/reverse_futility.cpp)
+    target_link_libraries(ironphoenix_reverse_futility PRIVATE IronPhoenix::Core)
+    add_test(NAME ironphoenix_reverse_futility COMMAND ironphoenix_reverse_futility)
+
+    add_executable(ironphoenix_attacking_pieces tests/attacking_pieces.cpp)
+    target_link_libraries(ironphoenix_attacking_pieces PRIVATE IronPhoenix::Core)
+    add_test(NAME ironphoenix_attacking_pieces COMMAND ironphoenix_attacking_pieces)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces PROPERTIES
         FOLDER "Tests"
     )
 endif()

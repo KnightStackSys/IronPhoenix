@@ -67,6 +67,8 @@ namespace ironphoenix {
     private:
         // Exposed only to the mate-stop regression test.
         friend struct MateStopTestAccess;
+        friend struct ReverseFutilityTestAccess;
+        [[nodiscard]] bool reverseFutilitySafe(Position& pos) const;
 
         struct TimeBudget final {
             std::int64_t minimumMs = 0;
