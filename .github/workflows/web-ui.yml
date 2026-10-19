@@ -1,0 +1,25 @@
+name: IronPhoenix Web UI
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/web-ui.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/web-ui.yml"]
+  workflow_dispatch:
+
+jobs:
+  test-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check browser and server JavaScript syntax
+        run: |
+          node --check web/app.js
+          node --check web/server.js
+          node --check web/notation.js
+      - name: Test parser, local API and engine bridge
+        run: node --test web/tests/*.test.js
