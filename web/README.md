@@ -3,7 +3,7 @@
 A **local-only**, dependency-free Node.js web GUI for IronPhoenix's
 four-player Teams engine. It displays the 14x14 cross board, lets you play
 legal moves, shows analysis PV arrows and MultiPV scores, and imports FEN4
-and coordinate-move PGN/PGN4.
+and long-algebraic PGN/PGN4 (including Chess.com-style files).
 
 ## Quick start on Windows
 
@@ -34,13 +34,14 @@ or the public internet. No npm install, external CDNs, or cloud services.
 - **Stop** sends the UCI `stop` command.
 - Paste an **IronPhoenix FEN4** into the FEN tab (orthodox 8x8 chess FEN
   is not compatible). Copy the current normalized FEN4 with one click.
-- Paste or open a **PGN / PGN4** containing legal four-player *coordinate*
-  moves, optionally prefixed with a `[FEN4 "..."]` tag. Navigate moves
-  using the arrows or move chips. Examples: `d2d4`, `d7a7`,
-  `e10e11q`. The C++ engine validates every move.
-- The engine currently accepts **coordinate notation**, not regular SAN
-  moves such as `Nf3` or `O-O`. Unsupported PGNs display an error; the
-  GUI will not invent an incorrect position.
+- Paste or open a **PGN / PGN4** with legal four-player long algebraic moves.
+  Examples: `d2d4`, `d2-d4`, `Qn8-m8`, `Qn8xQi4+`.
+  `[StartFen4 "4PC"]`, `[StartFen4 "<full FEN4>"]` and
+  `[FEN4 "..."]` are recognized. Navigate moves with the arrows or move
+  chips. The C++ engine validates every move.
+- Ordinary SAN moves such as `Nf3`, `e4` or `O-O` still require
+  conversion, and Free-For-All PGN4 is not supported by this Teams engine.
+  Unsupported imports display an error rather than inventing positions.
 
 All board-state changes are resolved by IronPhoenix itself using its
 `position`, `fen`, and `moves` commands. The browser does not

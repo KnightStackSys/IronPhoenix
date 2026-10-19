@@ -27,6 +27,18 @@ test('PGN tag plus coordinate movetext and annotations', () => {
   assert.deepEqual(game.moves, ['d2d4', 'd12d10', 'g2g4']);
   assert.equal(game.tags.event, 'Friendly');
 });
+test('Chess.com PGN4 long notation and quarter-move separators', () => {
+  const game = parsePgn('[Variant "Teams"]\n[StartFen4 "4PC"]\n' +
+    '1. d2-d4 .. b8-c8 .. k13-k11 .. m8-l8\n' +
+    '2. Qn8-m8 .. Qm8xQi4+ .. Kh1xQh2#');
+  assert.equal(game.fen, null);
+  assert.deepEqual(game.moves, [
+    'd2d4', 'b8c8', 'k13k11', 'm8l8', 'n8m8', 'm8i4', 'h1h2'
+  ]);
+});
+test('rejects Free-For-All PGN4 for the Teams-only engine', () => {
+  assert.throws(() => parsePgn('[Variant "FFA"]\n1. d2-d4'), /Free-For-All/);
+});
 test('reports unsupported SAN explicitly', () => {
   assert.throws(() => parsePgn('[Event "Chess"]\n1. e4 Nf3'), /Unsupported PGN move/);
 });

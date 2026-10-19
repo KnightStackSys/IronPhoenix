@@ -76,10 +76,10 @@
             <div class="button-row"><button id="loadFenBtn" class="button secondary">Load FEN4</button><button id="copyFenBtn" class="button outline">Copy current FEN</button></div>
           </div>
           <div id="pgnPane" hidden>
-            <label class="field-label" for="pgnInput">Coordinate-move PGN or PGN4</label>
+            <label class="field-label" for="pgnInput">Four-player PGN / PGN4</label>
             <textarea id="pgnInput" rows="5" spellcheck="false" placeholder='[FEN4 "R-..."]&#10;1. d2d4 ...'></textarea>
             <div class="button-row"><button id="loadPgnBtn" class="button secondary">Load PGN</button><label class="button outline file-button">Choose .pgn file<input id="pgnFile" type="file" accept=".pgn,.pgn4,.txt" hidden></label></div>
-            <p class="format-note">Supports four-player coordinate moves (e.g. d2d4, d7a7), optional FEN4 tags, comments, and move numbers. Standard SAN such as Nf3 is not supported by IronPhoenix's move parser.</p>
+            <p class="format-note">Supports four-player long algebraic moves (e.g. d2-d4, Qn8xQi4), StartFen4 tags, comments and move numbers. Ordinary two-player SAN like Nf3 is not supported.</p>
           </div>
         </section>
 

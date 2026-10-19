@@ -134,7 +134,7 @@ cmake --build out\build\x64-release --target ironphoenix_dataset
 
 Run IronPhoenix through a **localhost-only** web interface with a
 14×14 4-player Teams board, legal move input, engine PV arrows,
-MultiPV scores, and FEN4 / coordinate-PGN game loading.
+MultiPV scores, and FEN4 / four-player PGN4 game loading.
 
 1. Build the native `ironphoenix` engine in Release mode.
 2. Copy the engine executable into the [`web/`](web/) folder, next to
