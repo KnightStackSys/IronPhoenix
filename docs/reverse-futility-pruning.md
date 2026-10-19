@@ -47,3 +47,15 @@ SPRT before claiming an Elo gain.
 The old experiment is PR #28 at branch tip
 `dcefe70131df6c83a69910e2edec39086e3efa7f`. Its RFP idea and initial constants
 are retained, while its unrelated merge history is excluded from this branch.
+
+## Search hot-path optimization (NPS experiment)
+
+The `reverse-futility-pruning-teams` branch also defers expensive
+`givesCheck()` calls at non-PV nodes until a move would otherwise be
+pruned by LMP, HMP, or SEE. PV nodes still receive full move ordering but
+no longer build check metadata used only by non-PV pruning. RFP and null-move
+pruning share a single partner-check/non-pawn-material eligibility test and
+reuse the recorded static evaluation. No pruning margins, move protections,
+or cutoffs were relaxed in this optimization. It targets time per node, not
+just reducing the number of nodes searched; measure NPS in an identical
+fixed-position/fixed-node search before asserting a speedup.

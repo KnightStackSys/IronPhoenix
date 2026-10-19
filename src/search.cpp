@@ -57,10 +57,6 @@ namespace ironphoenix {
             return static_cast<bool>(pieces);
         }
 
-        IRONPHOENIX_FORCE_INLINE bool cachedGivesCheck(const std::uint64_t* bits, std::size_t index) noexcept {
-            return ((bits[index >> 6u] >> (index & 63u)) & 1ull) != 0;
-        }
-
         IRONPHOENIX_FORCE_INLINE int captureOrderingScore(Piece movingPiece, Move move) noexcept {
             // Full four-player SEE is expensive enough that using it on every
             // generated capture purely for ordering costs substantial NPS.
@@ -749,17 +745,19 @@ namespace ironphoenix {
         const Color us = pos.sideToMove();
         const bool mateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD);
 
+        // RFP and NMP share all of these guards. In 4PC the partner-check
+        // query can be expensive: compute it once for both heuristics.
+        const bool canStaticPrune = allowNull && !pvNode && ply > 0
+            && !inCheckNode && !mateWindow
+            && hasNonPawnMaterial(pos, us)
+            && !pos.inCheck(static_cast<Color>(static_cast<unsigned>(us) ^ 2u));
+
         // RFP estimates a fail-high in the side-to-move TEAM's perspective,
         // exactly as evaluate() does. Never negate for the partner. Keep this
         // out of null-move child nodes, root/PV nodes, checks and mate windows.
-        if (allowNull && !pvNode && ply > 0
-            && depth <= REVERSE_FUTILITY_MAX_DEPTH
-            && !inCheckNode && !mateWindow
-            && hasNonPawnMaterial(pos, us)) {
-            const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
-            if (!pos.inCheck(partner)) {
-                const int staticEval = evaluate(pos);
-                recordStackEvaluation(ply, staticEval);
+        if (canStaticPrune && depth <= REVERSE_FUTILITY_MAX_DEPTH) {
+            const int staticEval = evaluate(pos);
+            recordStackEvaluation(ply, staticEval);
                 // Search-stack evaluations are already team-relative. If a
                 // comparable same-team ancestor shows the position improving,
                 // use a smaller margin; otherwise keep the base margin.
@@ -774,22 +772,13 @@ namespace ironphoenix {
                 if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD
                     && estimate >= beta && reverseFutilitySafe(pos))
                     return estimate;
-            }
         }
 
         // Null Move Pruning (NMP): reuse the stack's raw evaluation when RFP
         // already evaluated this node. The existing NMP policy is unchanged.
-        if (allowNull
-            && !pvNode
-            && ply > 0
-            && depth >= NULL_MOVE_MIN_DEPTH
-            && !inCheckNode
-            && !mateWindow
-            && hasNonPawnMaterial(pos, us)) {
-
-            const Color partner = static_cast<Color>(static_cast<unsigned>(us) ^ 2u);
-            if (!pos.inCheck(partner)) {
-                const int staticEval = ss.staticEvalValid ? ss.staticEval : evaluate(pos);
+        if (canStaticPrune && depth >= NULL_MOVE_MIN_DEPTH) {
+            const int staticEval = ss.staticEvalValid ? ss.staticEval : evaluate(pos);
+            if (!ss.staticEvalValid)
                 recordStackEvaluation(ply, staticEval);
 
                 if (staticEval >= beta) {
@@ -818,26 +807,22 @@ namespace ironphoenix {
                     // Never manufacture a mate score from a synthetic pass.
                     if (nullScore >= beta && nullScore < MATE_THRESHOLD)
                         return nullScore;
-                }
-            }
         }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
 
         std::array<int, MAX_MOVES> orderedScores;
-        std::array<std::uint64_t, CHECK_BIT_WORDS> givesCheckBits;
 
         if (pvNode) {
-            // PV nodes are comparatively rare and benefit from complete ordering.
-            // Keep their existing full sort and cached check metadata.
+            // PV nodes benefit from full sorting but never use the check
+            // bitmap or pruning scores. Checking every capture/promotion
+            // here adds work without changing ordering.
             orderMoves(pos,
                 moves.begin(),
                 moves.end(),
                 ttMove,
-                ply,
-                orderedScores.data(),
-                givesCheckBits.data());
+                ply);
         }
         else {
             // At cut nodes avoid sorting the entire move list and avoid eager
@@ -882,11 +867,8 @@ namespace ironphoenix {
             ss.currentMove = move;
             const Piece movingPiece = pos.pieceAt(move.from());
             const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);
-            const bool givesCheckMove = pvNode
-                ? cachedGivesCheck(givesCheckBits.data(), moveIndex)
-                : (!terminalKingCapture && pos.givesCheck(move));
             const bool quiet = !move.isCapture() && !move.isPromotion();
-            const int lmrHistoryScore = quiet ? orderedScores[moveIndex] : 0;
+            const int lmrHistoryScore = (!pvNode && quiet) ? orderedScores[moveIndex] : 0;
 
             int score = -INF;
             bool legal = true;
@@ -894,49 +876,37 @@ namespace ironphoenix {
             const bool moveMateWindow = !(alpha > -MATE_THRESHOLD && beta < MATE_THRESHOLD)
                 && !terminalKingCapture;
 
-            // Late Move Pruning (LMP): at non-PV nodes, stop spending search
-            // effort on late quiet moves unless history says the move is
-            // promising. Checks, TT moves, promotions/captures, and mate-window
-            // searches are never pruned here. This intentionally has no depth cap.
-            if (!pvNode
-                && !inCheckNode
+            // Most 4PC moves are *not* candidates for LMP/HMP/SEE pruning.
+            // Only call the expensive givesCheck() routine if a move would
+            // otherwise be pruned. This retains the existing checks exemption
+            // and avoids needless attack-map queries on every searched move.
+            const bool canPruneMove = !pvNode && !inCheckNode
+                && move != ttMove && !moveMateWindow;
+            const bool lmpCandidate = canPruneMove && quiet
                 && legalMoves >= 3 + depth * depth
-                && quiet
-                && move != ttMove
-                && !givesCheckMove
-                && !moveMateWindow
-                && lmrHistoryScore < LMP_HISTORY_THRESHOLD) {
-                continue;
-            }
-
-            // History Move Pruning (HMP): prune quiet moves with strongly negative
-            // accumulated history before they consume a search. Keep it shallow,
-            // protect the first legal move, and never prune tactical/special moves.
-            if (!pvNode
-                && !inCheckNode
+                && lmrHistoryScore < LMP_HISTORY_THRESHOLD;
+            const bool hmpCandidate = canPruneMove && quiet
                 && depth <= HISTORY_MOVE_PRUNE_MAX_DEPTH
                 && legalMoves > 0
-                && quiet
-                && move != ttMove
-                && !givesCheckMove
-                && !moveMateWindow
-                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth) {
-                continue;
-            }
-
-            // Static Exchange Evaluation (SEE) Pruning: at non-PV nodes, if a
-            // capture move is likely to lose material, skip it. This is only done
-            // at shallow depths, since SEE is not always accurate in complex positions.
-            // SEE pruning is not applied to TT moves, promotions, checks, or mate-window searches.
-            if (!pvNode
-                && !inCheckNode
+                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth;
+            const bool seeCandidate = canPruneMove && legalMoves > 0
                 && depth <= tuning.seePruneMaxDepth
-                && legalMoves > 0
-                && move.isCapture()
-                && !move.isPromotion()
-                && move != ttMove
-                && !givesCheckMove
-                && !moveMateWindow) {
+                && move.isCapture() && !move.isPromotion();
+
+            const bool givesCheckMove = (lmpCandidate || hmpCandidate || seeCandidate)
+                && !terminalKingCapture && pos.givesCheck(move);
+
+            // Late Move Pruning (LMP): keep checking moves and all exclusions.
+            if (lmpCandidate && !givesCheckMove)
+                continue;
+
+            // History Move Pruning (HMP): do not discard checking moves.
+            if (hmpCandidate && !givesCheckMove)
+                continue;
+
+            // Static Exchange Evaluation (SEE) Pruning: only investigate
+            // losing captures if a check does not already protect the move.
+            if (seeCandidate && !givesCheckMove) {
                 const int seeThreshold = -tuning.seePruneMarginPerDepth * depth;
                 if (!seeGE(pos, move, seeThreshold, SeeMode::Legal))
                     continue;
