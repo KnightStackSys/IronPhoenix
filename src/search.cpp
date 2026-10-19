@@ -766,20 +766,20 @@ namespace ironphoenix {
         if (canStaticPrune && depth <= REVERSE_FUTILITY_MAX_DEPTH) {
             const int staticEval = evaluate(pos);
             recordStackEvaluation(ply, staticEval);
-                // Search-stack evaluations are already team-relative. If a
-                // comparable same-team ancestor shows the position improving,
-                // use a smaller margin; otherwise keep the base margin.
-                // The bounded discount never turns this into a zero-margin
-                // static-evaluation cutoff, even at depth one.
-                const int improvingDiscount = ss.improving
-                    ? std::min(REVERSE_FUTILITY_MAX_IMPROVING_DISCOUNT, ss.improvingRate / 3)
-                    : 0;
-                const int margin = std::max(REVERSE_FUTILITY_MIN_MARGIN,
-                    REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth - improvingDiscount);
-                const int estimate = staticEval - margin;
-                if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD
-                    && estimate >= beta && reverseFutilitySafe(pos))
-                    return estimate;
+            // Search-stack evaluations are already team-relative. If a
+            // comparable same-team ancestor shows the position improving,
+            // use a smaller margin; otherwise keep the base margin.
+            // The bounded discount never turns this into a zero-margin
+            // static-evaluation cutoff, even at depth one.
+            const int improvingDiscount = ss.improving
+                ? std::min(REVERSE_FUTILITY_MAX_IMPROVING_DISCOUNT, ss.improvingRate / 3)
+                : 0;
+            const int margin = std::max(REVERSE_FUTILITY_MIN_MARGIN,
+                REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth - improvingDiscount);
+            const int estimate = staticEval - margin;
+            if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD
+                && estimate >= beta && reverseFutilitySafe(pos))
+                return estimate;
         }
 
         // Null Move Pruning (NMP): reuse the stack's raw evaluation when RFP
@@ -789,7 +789,7 @@ namespace ironphoenix {
             if (!ss.staticEvalValid)
                 recordStackEvaluation(ply, staticEval);
 
-                if (staticEval >= beta) {
+            if (staticEval >= beta) {
                     StateInfo nullState;
                     pos.makeNullMove(nullState);
                     searchStack_[ply + 1].history = HistoryContext{};
@@ -815,6 +815,7 @@ namespace ironphoenix {
                     // Never manufacture a mate score from a synthetic pass.
                     if (nullScore >= beta && nullScore < MATE_THRESHOLD)
                         return nullScore;
+            }
         }
 
         MoveList moves;
