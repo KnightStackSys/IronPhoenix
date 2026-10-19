@@ -5,6 +5,9 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+
 namespace ironphoenix::Eval {
 
     namespace {
@@ -126,6 +129,81 @@ namespace ironphoenix::Eval {
             return pressure * weight / 100;
         }
 
+        // 4PC home camps point towards four different board edges.
+        // A queen that reaches an enemy's half of the cross may develop
+        // useful pressure against that side's king. This is deliberately
+        // not the same as an attack on the king or a guaranteed tactic.
+        IRONPHOENIX_FORCE_INLINE int enemyCampDepth(Color enemyColor, int file, int rank) noexcept {
+            switch (enemyColor) {
+            case RED:    return 7 - rank;
+            case BLUE:   return 7 - file;
+            case YELLOW: return rank - 6;
+            case GREEN:  return file - 6;
+            }
+            return 0;
+        }
+
+        IRONPHOENIX_FORCE_INLINE bool inHomeCamp(Color color, int file, int rank) noexcept {
+            switch (color) {
+            case RED:    return rank <= 2;
+            case BLUE:   return file <= 2;
+            case YELLOW: return rank >= 11;
+            case GREEN:  return file >= 11;
+            }
+            return false;
+        }
+
+        int queenInfiltrationForColor(const Position& pos, Color c) noexcept {
+            const int weight = Tuning::eval().queenInfiltration;
+            if (weight <= 0 || !pos.isAlive(c))
+                return 0;
+
+            int score = 0;
+            Bitboard queens = pos.pieces(c, QUEEN);
+            const Bitboard occupancy = pos.occupancy();
+
+            while (queens) {
+                const Square queen = popLsb(queens);
+                const int file = static_cast<int>(Geometry::fileOf(queen));
+                const int rank = static_cast<int>(Geometry::rankOf(queen));
+
+                // Staying in the queen's own camp is not infiltration.
+                if (inHomeCamp(c, file, rank))
+                    continue;
+
+                int potential = 0;
+                for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                    const Color opponent = static_cast<Color>(ci);
+                    if (!enemy(c, opponent) || !pos.isAlive(opponent))
+                        continue;
+
+                    const Square king = pos.kingSquare(opponent);
+                    if (king == SQ_NONE)
+                        continue;
+
+                    // Require material penetration beyond the centre,
+                    // not just a queen occupying a central square.
+                    const int depth = enemyCampDepth(opponent, file, rank);
+                    if (depth < 2)
+                        continue;
+
+                    const int kingFile = static_cast<int>(Geometry::fileOf(king));
+                    const int kingRank = static_cast<int>(Geometry::rankOf(king));
+                    const int distance = std::max(std::abs(file - kingFile), std::abs(rank - kingRank));
+                    if (distance > 6)
+                        continue;
+
+                    potential += (depth - 1) * (7 - distance);
+                }
+
+                // Avoid expensive attack-map queries for queens without any
+                // eligible infiltration bonus. Never reward a hanging queen.
+                if (potential > 0 && !pos.isAttackedByEnemy(queen, c, occupancy))
+                    score += potential * weight;
+            }
+            return score;
+        }
+
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
@@ -133,7 +211,8 @@ namespace ironphoenix::Eval {
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
                 const int score = materialForColor(pos, c)
-                    + mobilityForColor(pos, c, attacks[teamOf(c)]);
+                    + mobilityForColor(pos, c, attacks[teamOf(c)])
+                    + queenInfiltrationForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
                 else
