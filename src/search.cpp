@@ -313,6 +313,14 @@ namespace ironphoenix {
         return budgetElapsedMs() >= target;
     }
 
+    bool SearchEngine::shouldStopOnWinningMate(int score, Move rootMove) const noexcept {
+        // Completed root wins may stop immediately. Negative mate scores
+        // continue searching for defenses. Infinite/ponder searches retain
+        // their usual explicit-stop behavior.
+        return !limits_.infinite && !pondering_ && static_cast<bool>(rootMove)
+            && score >= MATE_THRESHOLD && score <= MATE_SCORE;
+    }
+
     int SearchEngine::evaluate(const Position& pos) const noexcept {
         return Eval::evaluate(pos);
     }
@@ -1285,6 +1293,11 @@ namespace ironphoenix {
                     pv_[0].data(),
                     pvLength_[0]
                 );
+
+                // Stop after a completed root iteration, never on an
+                // intermediate aspiration lower/upper bound.
+                if (shouldStopOnWinningMate(bestScore, bestMove))
+                    break;
             }
 
             if (requestedDepth > 0 && depth == requestedDepth)
