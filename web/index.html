@@ -51,14 +51,15 @@
             <div class="stat"><span>Time</span><strong id="timeStat">—</strong></div>
           </div>
           <div class="inputs-row">
-            <label>Max depth <input id="depthInput" type="number" min="1" max="64" value="10"></label>
-            <label>MultiPV <select id="multiInput"><option value="1">1 line</option><option value="2">2 lines</option><option value="3" selected>3 lines</option><option value="4">4 lines</option></select></label>
-            <label>Move time (ms) <input id="timeInput" type="number" min="0" max="120000" value="0" title="0 uses depth limit"></label>
+            <label>Max depth <input id="depthInput" type="number" min="1" max="64" value="6"></label>
+            <label>MultiPV <select id="multiInput"><option value="1" selected>1 line (fast)</option><option value="2">2 lines</option><option value="3">3 lines</option><option value="4">4 lines</option></select></label>
+            <label>Move time (ms) <input id="timeInput" type="number" min="0" max="120000" value="1500" title="Default is 1.5 seconds; set 0 to search until max depth."></label>
           </div>
           <div class="button-row">
             <button id="analyzeBtn" class="button primary">▶ Analyze position</button>
             <button id="stopBtn" class="button secondary" disabled>■ Stop</button>
           </div>
+          <p class="format-note">Quick analysis: 1 line, 1.5 seconds. Set Move time to 0 to use the depth limit; more PV lines and deeper searches take longer.</p>
           <div class="pv-title"><span>ENGINE LINES</span><span id="scoreHint">Waiting for analysis</span></div>
           <div id="pvLines" class="pv-lines" aria-live="polite"><p class="empty">Start analysis to see best moves and arrows.</p></div>
           <div class="bestmove">Best move <strong id="bestmove">—</strong></div>

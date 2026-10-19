@@ -30,7 +30,11 @@ or the public internet. No npm install, external CDNs, or cloud services.
 
 - Select a piece and then a highlighted legal square to make a move.
 - Click **Analyze position** to show up to four MultiPV lines and arrows.
-  Enter a maximum depth, or set a nonzero move time in milliseconds.
+  Quick mode defaults to **one PV line and 1,500 ms** of search. To search
+  to a chosen depth instead, set **Move time** to `0`; the **Max depth**
+  field is then used. Depth-10/MultiPV-3 is much more computationally
+  expensive on four-player positions and can appear unresponsive.
+  These settings limit analysis work; they don't change engine NPS.
 - **Stop** sends the UCI `stop` command.
 - Paste an **IronPhoenix FEN4** into the FEN tab (orthodox 8x8 chess FEN
   is not compatible). Copy the current normalized FEN4 with one click.

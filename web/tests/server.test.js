@@ -53,6 +53,12 @@ test('loopback HTTP bridge serves GUI, validates 4PC positions and launches engi
     const search = await post(base, '/api/analyze', { depth: 3, multiPV: 2 });
     assert.equal(search.status, 200);
     assert.equal(search.body.searchId, 1);
+    // A call without options defaults to low-overhead single-PV mode.
+    const stopped = await post(base, '/api/stop', {});
+    assert.equal(stopped.status, 200);
+    const quick = await post(base, '/api/analyze', {});
+    assert.equal(quick.status, 200);
+    assert.equal(quick.body.searchId, 2);
 
     const stop = await post(base, '/api/stop', {});
     assert.equal(stop.status, 200);

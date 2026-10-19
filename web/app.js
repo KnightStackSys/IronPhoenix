@@ -18,6 +18,21 @@ let lastSearchId = 0;
 let engineOnline = false;
 let analysing = false;
 let toastTimer = null;
+let boardState = null;
+let boardTurn = 'r';
+const boardCells = new Map();
+let renderedMoveKey = null;
+let renderedMoveButtons = [];
+let renderedMoveCursor = 0;
+let analysisFrame = null;
+
+function queueAnalysisRender() {
+  if (analysisFrame !== null) return;
+  analysisFrame = requestAnimationFrame(() => {
+    analysisFrame = null;
+    renderAnalysis();
+  });
+}
 
 function setConnection(online, running = false) {
   engineOnline = online;
@@ -107,8 +122,47 @@ function splitMove(move) {
 function renderBoard() {
   if (!position.fen) return;
   const { board, turn } = parseFenBoard(position.fen);
+  boardState = board;
+  boardTurn = turn;
   $('turnText').textContent = names[turn] + ' TO MOVE';
   $('turnBadge').querySelector('.turn-light').style.backgroundColor = 'var(--' + colors[turn] + ')';
+
+  const boardEl = $('board');
+  if (boardCells.size === 0) {
+    // The board geometry never changes. Build each square once instead of
+    // allocating 196 buttons, handlers, and piece glyphs on every click.
+    const fragment = document.createDocumentFragment();
+    for (let row = 0; row < 14; ++row) {
+      for (let col = 0; col < 14; ++col) {
+        const sq = squareName(row, col);
+        const valid = isPlayable(row, col);
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.dataset.square = sq;
+        cell.disabled = !valid;
+        cell.className = valid ? 'square valid ' + ((row + col) % 2 ? 'dark' : 'light') : 'square invalid';
+        cell.setAttribute('role', 'gridcell');
+        if (valid && ((row === 10 && col >= 3 && col <= 10) ||
+            (col === 3 && row >= 3 && row <= 10))) {
+          const coord = document.createElement('span');
+          coord.className = 'coordinates';
+          coord.textContent = row === 10 ? sq[0] : sq.slice(1);
+          cell.appendChild(coord);
+        }
+        boardCells.set(sq, cell);
+        fragment.appendChild(cell);
+      }
+    }
+    boardEl.appendChild(fragment);
+    // One event listener handles all legal board squares.
+    boardEl.addEventListener('click', event => {
+      const cell = event.target.closest('.square.valid');
+      if (!cell || !boardState) return;
+      const loc = squareCoords(cell.dataset.square);
+      if (loc) chooseSquare(cell.dataset.square, boardState[loc.row][loc.col], boardTurn);
+    });
+  }
+
   const legalTargets = new Set();
   if (selected) {
     for (const move of position.legal) {
@@ -116,44 +170,33 @@ function renderBoard() {
       if (parsed && parsed[0] === selected) legalTargets.add(parsed[1]);
     }
   }
-  const lastMove = position.moves.length ? splitMove(position.moves[position.moves.length - 1]) : null;
-  const boardEl = $('board');
-  boardEl.replaceChildren();
-  const fragment = document.createDocumentFragment();
+  const lastMove = position.moves.length
+    ? splitMove(position.moves[position.moves.length - 1]) : null;
   for (let row = 0; row < 14; ++row) {
     for (let col = 0; col < 14; ++col) {
+      if (!isPlayable(row, col)) continue;
       const sq = squareName(row, col);
-      const valid = isPlayable(row, col);
-      const cell = document.createElement('button');
-      cell.type = 'button';
-      cell.className = valid ? 'square valid ' + ((row + col) % 2 ? 'dark' : 'light') : 'square invalid';
-      cell.dataset.square = sq;
-      cell.setAttribute('role', 'gridcell');
-      cell.disabled = !valid;
-      if (valid) {
-        cell.setAttribute('aria-label', sq + (board[row][col] ? ' ' + colors[board[row][col][0]] + ' ' + board[row][col][1] : ''));
-        if (selected === sq) cell.classList.add('selected');
-        if (legalTargets.has(sq)) cell.classList.add('legal-target');
-        if (lastMove && lastMove[0] === sq) cell.classList.add('lastfrom');
-        if (lastMove && lastMove[1] === sq) cell.classList.add('lastto');
-        cell.addEventListener('click', () => chooseSquare(sq, board[row][col], turn));
-        if (board[row][col]) {
+      const cell = boardCells.get(sq);
+      const pieceId = board[row][col] || '';
+      if (cell.dataset.piece !== pieceId) {
+        cell.querySelector('.piece')?.remove();
+        cell.dataset.piece = pieceId;
+        if (pieceId) {
           const piece = document.createElement('span');
-          piece.className = 'piece ' + colors[board[row][col][0]];
-          piece.textContent = glyphs[board[row][col][1]] || '?';
-          cell.appendChild(piece);
+          piece.className = 'piece ' + colors[pieceId[0]];
+          piece.textContent = glyphs[pieceId[1]] || '?';
+          cell.prepend(piece);
         }
-        if ((row === 10 && col >= 3 && col <= 10) || (col === 3 && row >= 3 && row <= 10)) {
-          const coord = document.createElement('span');
-          coord.className = 'coordinates';
-          coord.textContent = row === 10 ? sq[0] : sq.slice(1);
-          cell.appendChild(coord);
-        }
+        cell.setAttribute('aria-label', sq + (pieceId ? ' ' + colors[pieceId[0]] + ' ' + pieceId[1] : ''));
       }
-      fragment.appendChild(cell);
+      let className = 'square valid ' + ((row + col) % 2 ? 'dark' : 'light');
+      if (selected === sq) className += ' selected';
+      if (legalTargets.has(sq)) className += ' legal-target';
+      if (lastMove && lastMove[0] === sq) className += ' lastfrom';
+      if (lastMove && lastMove[1] === sq) className += ' lastto';
+      if (cell.className !== className) cell.className = className;
     }
   }
-  boardEl.appendChild(fragment);
   renderArrows();
 }
 
@@ -253,6 +296,10 @@ function renderAnalysis() {
 }
 
 function clearAnalysis() {
+  if (analysisFrame !== null) {
+    cancelAnimationFrame(analysisFrame);
+    analysisFrame = null;
+  }
   analysis = new Map();
   activePV = 1;
   $('bestmove').textContent = '—';
@@ -266,32 +313,50 @@ function renderMoves() {
   $('moveCursor').textContent = cursor === 0 ? 'Starting position' : 'After move ' + cursor + ' / ' + gameMoves.length;
   $('firstBtn').disabled = $('prevBtn').disabled = cursor === 0;
   $('nextBtn').disabled = $('lastBtn').disabled = cursor === gameMoves.length;
-  const container = $('moveList');
-  container.replaceChildren();
-  if (!gameMoves.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty';
-    empty.textContent = 'No moves loaded yet.';
-    container.appendChild(empty);
-    return;
+  const key = gameMoves.join('\u0000');
+  if (key !== renderedMoveKey) {
+    renderedMoveKey = key;
+    renderedMoveButtons = [];
+    const container = $('moveList');
+    container.replaceChildren();
+    if (!gameMoves.length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty';
+      empty.textContent = 'No moves loaded yet.';
+      container.appendChild(empty);
+    } else {
+      const fragment = document.createDocumentFragment();
+      gameMoves.forEach((move, index) => {
+        const button = document.createElement('button');
+        button.className = 'move-chip';
+        button.textContent = (Math.floor(index / 4) + 1) + (index % 4 === 0 ? '.' : '·') + move;
+        button.title = 'Go to ply ' + (index + 1);
+        button.addEventListener('click', () => gotoPly(index + 1));
+        renderedMoveButtons.push(button);
+        fragment.appendChild(button);
+      });
+      container.appendChild(fragment);
+    }
+    renderedMoveCursor = 0;
   }
-  gameMoves.forEach((move, index) => {
-    const button = document.createElement('button');
-    button.className = 'move-chip' + (cursor === index + 1 ? ' active' : '');
-    button.textContent = (Math.floor(index / 4) + 1) + (index % 4 === 0 ? '.' : '·') + move;
-    button.title = 'Go to ply ' + (index + 1);
-    button.addEventListener('click', () => gotoPly(index + 1));
-    container.appendChild(button);
-  });
+  if (renderedMoveCursor) renderedMoveButtons[renderedMoveCursor - 1]?.classList.remove('active');
+  if (cursor) renderedMoveButtons[cursor - 1]?.classList.add('active');
+  renderedMoveCursor = cursor;
 }
 
 function applyPosition(next) {
   if (!next?.fen) return;
+  const samePosition = position.fen === next.fen
+    && position.moves.join(' ') === next.moves.join(' ');
   position = next;
   selected = null;
   setConnection(next.online, next.analysing);
-  $('fenInput').value = next.fen;
-  renderBoard();
+  // Local API replies and SSE both send the same position. Do not redraw
+  // the entire board twice or overwrite FEN text while a user is editing.
+  if (!samePosition) {
+    $('fenInput').value = next.fen;
+    renderBoard();
+  }
   renderMoves();
 }
 
@@ -423,7 +488,9 @@ updates.addEventListener('analysis', event => {
   const data = JSON.parse(event.data);
   if (data.searchId !== lastSearchId) return;
   analysis.set(data.multiPV, data);
-  renderAnalysis();
+  // UCI can output multiple lines in one event-loop turn. Only rebuild
+  // analysis rows/arrows once per browser animation frame.
+  queueAnalysisRender();
 });
 updates.addEventListener('bestmove', event => {
   const data = JSON.parse(event.data);

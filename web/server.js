@@ -283,8 +283,8 @@ class EngineBridge {
       await this.ensure();
       if (!this.position.fen) await this.positionInternal({});
       await this.stopInternal();
-      const multiPV = Number(options.multiPV ?? 3);
-      const depth = Number(options.depth ?? 10);
+      const multiPV = Number(options.multiPV ?? 1);
+      const depth = Number(options.depth ?? 6);
       const moveTime = Number(options.movetime ?? 0);
       if (!Number.isInteger(multiPV) || multiPV < 1 || multiPV > 8
         || !Number.isInteger(depth) || depth < 1 || depth > 64
