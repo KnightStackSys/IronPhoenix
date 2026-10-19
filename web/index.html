@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101522">
+  <title>IronPhoenix · Analysis Studio</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <div class="shell">
+    <header class="masthead">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">♞</span>
+        <div><div class="eyebrow">FOUR-PLAYER TEAMS CHESS</div><h1>Iron<span>Phoenix</span></h1></div>
+        <span class="brand-tag">ANALYSIS STUDIO</span>
+      </div>
+      <div class="connection"><span id="statusDot" class="status-dot"></span><span id="statusText">Connecting to engine…</span></div>
+    </header>
+
+    <div id="errorBanner" class="error-banner" role="alert" hidden></div>
+    <main class="workspace">
+      <section class="card board-panel" aria-label="Four-player chessboard">
+        <div class="board-heading">
+          <div><div class="eyebrow">LIVE POSITION</div><h2>Analysis board</h2></div>
+          <div class="turn-pill" id="turnBadge"><span class="turn-light"></span><span id="turnText">RED TO MOVE</span></div>
+        </div>
+        <div class="board-surround">
+          <div class="board-frame">
+            <div id="board" class="board" role="grid" aria-label="IronPhoenix four-player chess board"></div>
+            <svg id="arrows" viewBox="0 0 1400 1400" preserveAspectRatio="none" aria-hidden="true"></svg>
+          </div>
+        </div>
+        <div class="teams">
+          <div class="team"><span class="team-dot red"></span><span class="team-dot yellow"></span><strong>Red + Yellow</strong><span>Team 1</span></div>
+          <div class="versus">VS</div>
+          <div class="team"><span class="team-dot blue"></span><span class="team-dot green"></span><strong>Blue + Green</strong><span>Team 2</span></div>
+        </div>
+        <div class="board-help">Select a piece and then a highlighted square to play a legal move. Engine arrows show principal-variation suggestions.</div>
+      </section>
+
+      <div class="side-panels">
+        <section class="card control-panel">
+          <div class="section-top"><div><div class="eyebrow">ENGINE CONTROL</div><h2>Search</h2></div><span class="chip">LOCAL UCI</span></div>
+          <div class="stats">
+            <div class="stat"><span>Depth</span><strong id="depthStat">—</strong></div>
+            <div class="stat"><span>Nodes</span><strong id="nodesStat">—</strong></div>
+            <div class="stat"><span>NPS</span><strong id="npsStat">—</strong></div>
+            <div class="stat"><span>Time</span><strong id="timeStat">—</strong></div>
+          </div>
+          <div class="inputs-row">
+            <label>Max depth <input id="depthInput" type="number" min="1" max="64" value="10"></label>
+            <label>MultiPV <select id="multiInput"><option value="1">1 line</option><option value="2">2 lines</option><option value="3" selected>3 lines</option><option value="4">4 lines</option></select></label>
+            <label>Move time (ms) <input id="timeInput" type="number" min="0" max="120000" value="0" title="0 uses depth limit"></label>
+          </div>
+          <div class="button-row">
+            <button id="analyzeBtn" class="button primary">▶ Analyze position</button>
+            <button id="stopBtn" class="button secondary" disabled>■ Stop</button>
+          </div>
+          <div class="pv-title"><span>ENGINE LINES</span><span id="scoreHint">Waiting for analysis</span></div>
+          <div id="pvLines" class="pv-lines" aria-live="polite"><p class="empty">Start analysis to see best moves and arrows.</p></div>
+          <div class="bestmove">Best move <strong id="bestmove">—</strong></div>
+        </section>
+
+        <section class="card import-panel">
+          <div class="section-top"><div><div class="eyebrow">POSITION EDITOR</div><h2>Load a game</h2></div><button id="resetBtn" class="small-button">↺ Start position</button></div>
+          <div class="tabbar" role="tablist" aria-label="Import format">
+            <button id="fenTab" class="tab active" role="tab" aria-selected="true">FEN4</button>
+            <button id="pgnTab" class="tab" role="tab" aria-selected="false">PGN / PGN4</button>
+          </div>
+          <div id="fenPane">
+            <label class="field-label" for="fenInput">Four-player FEN</label>
+            <textarea id="fenInput" rows="3" spellcheck="false" placeholder="Paste an IronPhoenix FEN4 position…"></textarea>
+            <div class="button-row"><button id="loadFenBtn" class="button secondary">Load FEN4</button><button id="copyFenBtn" class="button outline">Copy current FEN</button></div>
+          </div>
+          <div id="pgnPane" hidden>
+            <label class="field-label" for="pgnInput">Coordinate-move PGN or PGN4</label>
+            <textarea id="pgnInput" rows="5" spellcheck="false" placeholder='[FEN4 "R-..."]&#10;1. d2d4 ...'></textarea>
+            <div class="button-row"><button id="loadPgnBtn" class="button secondary">Load PGN</button><label class="button outline file-button">Choose .pgn file<input id="pgnFile" type="file" accept=".pgn,.pgn4,.txt" hidden></label></div>
+            <p class="format-note">Supports four-player coordinate moves (e.g. d2d4, d7a7), optional FEN4 tags, comments, and move numbers. Standard SAN such as Nf3 is not supported by IronPhoenix's move parser.</p>
+          </div>
+        </section>
+
+        <section class="card moves-panel">
+          <div class="section-top"><div><div class="eyebrow">GAME EXPLORER</div><h2>Moves</h2></div><span id="moveCount" class="chip">0 PLY</span></div>
+          <div class="navigation">
+            <button id="firstBtn" aria-label="First position">⇤</button>
+            <button id="prevBtn" aria-label="Previous move">‹</button>
+            <span id="moveCursor">Starting position</span>
+            <button id="nextBtn" aria-label="Next move">›</button>
+            <button id="lastBtn" aria-label="Last position">⇥</button>
+          </div>
+          <div id="moveList" class="move-list"><p class="empty">No moves loaded yet.</p></div>
+        </section>
+      </div>
+    </main>
+    <footer>IRONPHOENIX • LOCALHOST ONLY • POWERED BY YOUR ENGINE EXECUTABLE • FEN4 / 4PC TEAMS</footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
