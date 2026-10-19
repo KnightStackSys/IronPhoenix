@@ -40,5 +40,5 @@ test('rejects Free-For-All PGN4 for the Teams-only engine', () => {
   assert.throws(() => parsePgn('[Variant "FFA"]\n1. d2-d4'), /Free-For-All/);
 });
 test('reports unsupported SAN explicitly', () => {
-  assert.throws(() => parsePgn('[Event "Chess"]\n1. e4 Nf3'), /Unsupported PGN move/);
+  assert.throws(() => parsePgn('[Event "Chess"]\n1. e4 Nf3'), /Unsupported PGN4? move/);
 });
