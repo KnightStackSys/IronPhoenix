@@ -50,8 +50,9 @@ namespace ironphoenix::Eval {
             return material;
         }
 
-        int mobilityForColor(const Position& pos, Color c) noexcept {
+        int mobilityForColor(const Position& pos, Color c, Bitboard& teamAttacks) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
+            const bool scoreThreats = Tuning::eval().attackingPiecesWeight != 0;
 
             int score = 0;
 
@@ -81,6 +82,8 @@ namespace ironphoenix::Eval {
 
                     const int mobility = (attacks & ~blockedByTeam).popcount();
                     score += mobility * mobilityWeight(pt);
+                    if (scoreThreats)
+                        teamAttacks |= attacks;
                 }
             };
 
@@ -89,27 +92,58 @@ namespace ironphoenix::Eval {
             scorePieces(ROOK);
             scorePieces(QUEEN);
 
+            // Pawns' capture directions are threats, not mobility.
+            if (scoreThreats) {
+                Bitboard pawns = pos.pieces(c, PAWN);
+                while (pawns)
+                    teamAttacks |= Geometry::PawnAttacks[c][popLsb(pawns)];
+            }
             return score;
         }
 
-        int playerScore(const Position& pos, Color c) noexcept {
-            return materialForColor(pos, c)
-                + mobilityForColor(pos, c);
+        int attackingPiecesForTeam(const Position& pos, int team, Bitboard attacks) noexcept {
+            const int weight = Tuning::eval().attackingPiecesWeight;
+            if (weight == 0)
+                return 0;
+
+            Bitboard pawns{}, minors{}, rooks{}, queens{};
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color victim = static_cast<Color>(ci);
+                if (teamOf(victim) == team || !pos.isAlive(victim))
+                    continue;
+                pawns |= pos.pieces(victim, PAWN);
+                minors |= pos.pieces(victim, KNIGHT) | pos.pieces(victim, BISHOP);
+                rooks |= pos.pieces(victim, ROOK);
+                queens |= pos.pieces(victim, QUEEN);
+            }
+
+            // Per distinct enemy target across both teammates, not per attack.
+            // Keep king threats out of this term: mate search handles kings.
+            const int pressure = 4 * (attacks & pawns).popcount()
+                + 10 * (attacks & minors).popcount()
+                + 16 * (attacks & rooks).popcount()
+                + 28 * (attacks & queens).popcount();
+            return pressure * weight / 100;
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {
-            int team0 = 0;
-            int team1 = 0;
+            int team0 = 0, team1 = 0;
+            Bitboard attacks[2]{};
 
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
-                const int score = playerScore(pos, c);
-
+                if (!pos.isAlive(c))
+                    continue;
+                const int score = materialForColor(pos, c)
+                    + mobilityForColor(pos, c, attacks[teamOf(c)]);
                 if (teamOf(c) == 0)
                     team0 += score;
                 else
                     team1 += score;
             }
+
+            team0 += attackingPiecesForTeam(pos, 0, attacks[0]);
+            team1 += attackingPiecesForTeam(pos, 1, attacks[1]);
 
             const int score = team0 - team1;
             return teamOf(pos.sideToMove()) == 0 ? score : -score;

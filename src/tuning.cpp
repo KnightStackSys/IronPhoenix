@@ -58,7 +58,8 @@ namespace ironphoenix::Tuning {
                 || name == "EvalKnightMobility"
                 || name == "EvalBishopMobility"
                 || name == "EvalRookMobility"
-                || name == "EvalQueenMobility";
+                || name == "EvalQueenMobility"
+                || name == "EvalAttackingPiecesWeight";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -155,6 +156,8 @@ namespace ironphoenix::Tuning {
             p.rookMobility = value;
         else if (name == "EvalQueenMobility" && inRange(value, -100, 100))
             p.queenMobility = value;
+        else if (name == "EvalAttackingPiecesWeight" && inRange(value, 0, 300))
+            p.attackingPiecesWeight = value;
         else
             return false;
 
@@ -228,6 +231,7 @@ namespace ironphoenix::Tuning {
             << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
             << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
             << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
+            << "option name EvalAttackingPiecesWeight type spin default 100 min 0 max 300\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -256,7 +260,8 @@ namespace ironphoenix::Tuning {
             << " EvalKnightMobility=" << e.knightMobility
             << " EvalBishopMobility=" << e.bishopMobility
             << " EvalRookMobility=" << e.rookMobility
-            << " EvalQueenMobility=" << e.queenMobility << '\n';
+            << " EvalQueenMobility=" << e.queenMobility
+            << " EvalAttackingPiecesWeight=" << e.attackingPiecesWeight << '\n';
     }
 
 } // namespace ironphoenix::Tuning
