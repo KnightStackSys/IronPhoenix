@@ -130,6 +130,31 @@ cmake --build out\build\x64-release --target ironphoenix_dataset
 
 ---
 
+## 🖥️ Local web analysis GUI
+
+Run IronPhoenix through a **localhost-only** web interface with a
+14×14 4-player Teams board, legal move input, engine PV arrows,
+MultiPV scores, and FEN4 / coordinate-PGN game loading.
+
+1. Build the native `ironphoenix` engine in Release mode.
+2. Copy the engine executable into the [`web/`](web/) folder, next to
+   `server.js` (on Windows: `web/ironphoenix.exe`). Copy
+   `ironphoenix.nnue` there too if desired.
+3. With Node.js 18+ installed, run:
+
+   ```cmd
+   cd web
+   node server.js
+   ```
+
+4. Open **http://127.0.0.1:8765** in your browser.
+
+On Windows you can also double-click `web/start.bat`. No npm dependencies
+are required. For supported notation, screenshots-independent setup and
+test instructions, read [`web/README.md`](web/README.md).
+
+---
+
 ## ▶️ Running the Engine
 
 Launch the engine executable and enter UCI-style commands:
