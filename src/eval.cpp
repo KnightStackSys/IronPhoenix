@@ -126,29 +126,25 @@ namespace ironphoenix::Eval {
             return pressure * weight / 100;
         }
 
-        // A team receives ONE bonus only if its surviving players jointly
-        // have bishops on both checkerboard colors. A complementary bishop
-        // can belong to the same player or their partner. Dense Square IDs
-        // are not checkerboard parity on a 14x14 cross, so use XY coords.
-        int teamBishopPair(const Position& pos, Color first, Color partner) noexcept {
+        // One bonus per team, even if both bishops belong to separate
+        // partners. Each three-word mask is constructed once at Geometry
+        // initialization, instead of walking bishops on every HCE call.
+        // An eliminated partner's bishops cannot qualify for the bonus.
+        IRONPHOENIX_FORCE_INLINE int teamBishopPair(const Position& pos,
+                                                     Color first, Color partner) noexcept {
             const int bonus = Tuning::eval().bishopPairBonus;
             if (bonus == 0)
                 return 0;
 
-            unsigned squareColors = 0;
-            for (Color owner : {first, partner}) {
-                if (!pos.isAlive(owner))
-                    continue;
-                Bitboard bishops = pos.pieces(owner, BISHOP);
-                while (bishops) {
-                    const Square sq = popLsb(bishops);
-                    const unsigned parity = (Geometry::fileOf(sq) + Geometry::rankOf(sq)) & 1u;
-                    squareColors |= 1u << parity;
-                    if (squareColors == 3u)
-                        return bonus;
-                }
-            }
-            return 0;
+            const Bitboard firstBishops = pos.isAlive(first)
+                ? pos.pieces(first, BISHOP) : Bitboard{};
+            const Bitboard partnerBishops = pos.isAlive(partner)
+                ? pos.pieces(partner, BISHOP) : Bitboard{};
+            const Bitboard teamBishops = firstBishops | partnerBishops;
+
+            return (teamBishops & Geometry::SquareColorMasks[0])
+                && (teamBishops & Geometry::SquareColorMasks[1])
+                ? bonus : 0;
         }
 
         int handcraftedEvaluate(const Position& pos) noexcept {

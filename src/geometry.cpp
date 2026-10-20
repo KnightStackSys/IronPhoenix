@@ -17,6 +17,7 @@ std::array<Bitboard, SQUARE_NB> KingAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers{};
 Bitboard BoardMask{};
+std::array<Bitboard, 2> SquareColorMasks{};
 
 std::array<std::array<std::uint8_t, SQUARE_NB>, LINE_FAMILY_NB> LineId{};
 std::array<std::array<std::uint8_t, SQUARE_NB>, LINE_FAMILY_NB> LinePos{};
@@ -168,6 +169,7 @@ void initialize() {
             FileOf[dense] = static_cast<std::uint8_t>(file);
             RankOf[dense] = static_cast<std::uint8_t>(rank);
             BoardMask.set(dense);
+            SquareColorMasks[static_cast<unsigned>((file + rank) & 1)].set(dense);
             ++dense;
         }
     }

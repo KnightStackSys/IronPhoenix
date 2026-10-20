@@ -1,6 +1,7 @@
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/nnue.hpp"
+#include "ironphoenix/tuning.hpp"
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/search.hpp"
 #include <iostream>
@@ -30,7 +31,7 @@ void check(Position pos, int teamDelta, const char* message) {
         const Key key = pos.key();
         Tuning::eval().bishopPairBonus = 0;
         const int without = Eval::evaluate(pos);
-        Tuning::eval().bishopPairBonus = 40;
+        Tuning::eval().bishopPairBonus = 10;
         const int with = Eval::evaluate(pos);
         expect(with - without == (teamOf(static_cast<Color>(c)) == 0 ? teamDelta : -teamDelta), message);
         expect(pos.key() == key && pos.verify(), "evaluation leaves position intact");
@@ -41,11 +42,23 @@ int main() {
     Geometry::init();
     NNUE::unloadNetwork();
     Tuning::resetAll();
+    expect(Tuning::eval().bishopPairBonus == 10, "default bonus is 10 cp");
+    // The masks must cover every playable square exactly once.
+    const Bitboard dark = Geometry::SquareColorMasks[0];
+    const Bitboard light = Geometry::SquareColorMasks[1];
+    expect((dark & light).empty(), "square-color masks are disjoint");
+    expect((dark | light) == Geometry::BoardMask, "square-color masks cover board");
+    expect(dark.popcount() == 80 && light.popcount() == 80,
+           "cross board has 80 squares of each color");
+    expect(dark.test(sq('g', 4)) != dark.test(sq('g', 5)),
+           "adjacent rank switches bishop square color");
+    expect(dark.test(sq('g', 4)) == dark.test(sq('i', 4)),
+           "two-file step does not switch square color");
     check(base(), 0, "no bishops");
     for (unsigned team = 0; team < 2; ++team) {
         const Color first = static_cast<Color>(team);
         const Color partner = static_cast<Color>(team + 2);
-        const int bonus = team == 0 ? 40 : -40;
+        const int bonus = team == 0 ? 10 : -10;
         auto pos = base();
         pos.placePiece(sq('g', 4), makePiece(first, BISHOP));
         check(pos, 0, "single bishop");
@@ -74,7 +87,7 @@ int main() {
     eliminated.finalizeSetup();
     Tuning::eval().bishopPairBonus = 0;
     const int withoutEliminated = Eval::evaluate(eliminated);
-    Tuning::eval().bishopPairBonus = 40;
+    Tuning::eval().bishopPairBonus = 10;
     expect(Eval::evaluate(eliminated) == withoutEliminated,
            "an eliminated partner cannot supply the missing bishop color");
 
@@ -94,11 +107,11 @@ int main() {
     expect(Tuning::eval().bishopPairBonus == 55, "UCI setter updates bonus");
     Tuning::printUciOptions(output);
     Tuning::printCurrent(output);
-    expect(output.str().find("option name EvalBishopPairBonus type spin default 40 min 0 max 1000") != std::string::npos,
+    expect(output.str().find("option name EvalBishopPairBonus type spin default 10 min 0 max 1000") != std::string::npos,
            "UCI option advertised");
     expect(output.str().find("EvalBishopPairBonus=55") != std::string::npos, "current tuning reports bonus");
     Tuning::resetEval();
-    expect(Tuning::eval().bishopPairBonus == 40, "reset restores initial bonus");
+    expect(Tuning::eval().bishopPairBonus == 10, "reset restores initial bonus");
     if (!failures) std::cout << "Team bishop-pair evaluation: PASS\n";
     return failures ? 1 : 0;
 }

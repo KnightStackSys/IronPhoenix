@@ -35,6 +35,10 @@ extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers;
 extern Bitboard BoardMask;
 
+// Absolute board-square colors on the 14x14 cross board, precomputed
+// once by Geometry::init(). Dense Square indices do not encode color.
+extern std::array<Bitboard, 2> SquareColorMasks;
+
 // Compact 14-bit line representation used by Position for current-occupancy
 // rook/bishop/queen attacks. Missing cross-board squares are encoded as
 // permanent blockers so a diagonal can never jump across a board hole.

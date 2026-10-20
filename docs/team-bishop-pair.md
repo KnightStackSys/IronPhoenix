@@ -8,12 +8,15 @@ awards **one team bonus** when the surviving team members jointly possess
 may supply both colors, or teammates may each supply a different color.
 Bishops belonging to an eliminated teammate do not count.
 
-The two square colors are calculated from the **absolute** file/rank parity
-(`(file + rank) & 1`), not the engine's dense Square index. Having two
-or more bishops on *only* light squares or *only* dark squares grants
-**no bishop-pair bonus**. Multiple complete pairs do not multiply the
-bonus. The relative scores are +40 cp to the owning team at the default
-setting, or -40 cp from the opposing team's perspective.
+The two square colors use **absolute** file/rank parity
+(`(file + rank) & 1`), not the engine's dense Square index. Both color
+masks are precomputed **once at Geometry initialization** (80 squares
+per mask), and evaluation uses bitboard intersection checks rather than
+looping over bishops at every search node. Having two or more bishops
+on *only* light squares or *only* dark squares grants **no pair bonus**.
+Multiple complete pairs do not multiply the bonus. At the experimental
+default, the relative score is +10 cp for the owning team (or -10 cp
+from the opposing team's perspective).
 
 This is complementary to the existing material, mobility and attacked-piece
 evaluation, and is implemented only in **HCE**, not loaded NNUE.
@@ -21,12 +24,19 @@ evaluation, and is implemented only in **HCE**, not loaded NNUE.
 ## Tunable UCI option
 
 ```text
-setoption name EvalBishopPairBonus value 40
+setoption name EvalBishopPairBonus value 10
 ```
 
-Defaults to **40 cp**, tunable **0 to 1000**, where **0 disables the term**
+Defaults to **10 cp**, tunable **0 to 1000**, where **0 disables the term**
 for direct A/B comparisons. Changing tuning via UCI clears the search
 transposition table; `ResetTuning` returns to default.
+
+The previous **40 cp** setting reportedly lost about **40 Elo** and
+reduced search speed in a user-reported match. The faster mask lookup
+addresses per-evaluation overhead, while the lower default reduces
+the heuristic's influence on evaluation and static-eval pruning.
+Neither improvement should be assumed to regain Elo or NPS until
+controlled benchmarks and matched SPRT results confirm it.
 
 ## Testing
 
