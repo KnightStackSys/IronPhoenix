@@ -36,6 +36,8 @@ namespace ironphoenix {
             int queenMobility = 1;
             // 100 = default pressure; 0 = disabled, for A/B tests.
             int attackingPiecesWeight = 100;
+            // One bonus per team for bishops spanning both square colors.
+            int bishopPairBonus = 40;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

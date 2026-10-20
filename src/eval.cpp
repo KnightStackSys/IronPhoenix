@@ -126,6 +126,31 @@ namespace ironphoenix::Eval {
             return pressure * weight / 100;
         }
 
+        // A team receives ONE bonus only if its surviving players jointly
+        // have bishops on both checkerboard colors. A complementary bishop
+        // can belong to the same player or their partner. Dense Square IDs
+        // are not checkerboard parity on a 14x14 cross, so use XY coords.
+        int teamBishopPair(const Position& pos, Color first, Color partner) noexcept {
+            const int bonus = Tuning::eval().bishopPairBonus;
+            if (bonus == 0)
+                return 0;
+
+            unsigned squareColors = 0;
+            for (Color owner : {first, partner}) {
+                if (!pos.isAlive(owner))
+                    continue;
+                Bitboard bishops = pos.pieces(owner, BISHOP);
+                while (bishops) {
+                    const Square sq = popLsb(bishops);
+                    const unsigned parity = (Geometry::fileOf(sq) + Geometry::rankOf(sq)) & 1u;
+                    squareColors |= 1u << parity;
+                    if (squareColors == 3u)
+                        return bonus;
+                }
+            }
+            return 0;
+        }
+
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
@@ -140,8 +165,10 @@ namespace ironphoenix::Eval {
                     team1 += score;
             }
 
-            team0 += attackingPiecesForTeam(pos, 0, attacks[0]);
-            team1 += attackingPiecesForTeam(pos, 1, attacks[1]);
+            team0 += attackingPiecesForTeam(pos, 0, attacks[0])
+                + teamBishopPair(pos, RED, YELLOW);
+            team1 += attackingPiecesForTeam(pos, 1, attacks[1])
+                + teamBishopPair(pos, BLUE, GREEN);
 
             const int score = team0 - team1;
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
