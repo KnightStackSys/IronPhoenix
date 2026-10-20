@@ -53,7 +53,68 @@ namespace ironphoenix::Eval {
             return material;
         }
 
-        int mobilityForColor(const Position& pos, Color c, Bitboard& teamAttacks) noexcept {
+        // A conservative, pawn-backed knight foothold on an enemy flank.
+        // There is no general centralization/distance/development reward.
+        // Use existing pawn-attack and proximity tables; no legal-move
+        // generation or sliding-piece attack-map construction in hot HCE.
+        IRONPHOENIX_FORCE_INLINE bool usefulKnightOutpost(
+            const Position& pos, Color c, Square sq) noexcept {
+            if (!pos.isAlive(c))
+                return false;
+
+            const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
+            const int f = Geometry::fileOf(sq);
+            const int r = Geometry::rankOf(sq);
+
+            // Must make actual progress away from the player's home edge.
+            switch (c) {
+            case RED:    if (r < 3) return false; break;
+            case BLUE:   if (f < 3) return false; break;
+            case YELLOW: if (r > 10) return false; break;
+            case GREEN:  if (f > 10) return false; break;
+            }
+
+            const bool supported =
+                static_cast<bool>(Geometry::PawnAttackers[c][sq] & pos.pieces(c, PAWN))
+                || (pos.isAlive(partner)
+                    && static_cast<bool>(Geometry::PawnAttackers[partner][sq]
+                        & pos.pieces(partner, PAWN)));
+            if (!supported)
+                return false;
+
+            // This is a pawn-unchallenged outpost, not immunity to every
+            // enemy piece. No reward for occupying an enemy pawn's attack.
+            Bitboard enemyMaterial{};
+            bool inEnemyFlank = false;
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color foe = static_cast<Color>(ci);
+                if (!enemy(c, foe) || !pos.isAlive(foe))
+                    continue;
+                if (Geometry::PawnAttackers[foe][sq] & pos.pieces(foe, PAWN))
+                    return false;
+
+                // Each opposing army's home flank has its own orientation.
+                switch (foe) {
+                case RED:    inEnemyFlank |= r <= 4; break;
+                case BLUE:   inEnemyFlank |= f <= 4; break;
+                case YELLOW: inEnemyFlank |= r >= 9; break;
+                case GREEN:  inEnemyFlank |= f >= 9; break;
+                }
+
+                Bitboard pieces = pos.occupancy(foe);
+                const Square king = pos.kingSquare(foe);
+                if (king != SQ_NONE)
+                    pieces.reset(king);
+                enemyMaterial |= pieces;
+            }
+
+            // No meaningless bonus for an empty area or the board centre.
+            return inEnemyFlank
+                && static_cast<bool>(Geometry::KnightEnemyProximity[sq] & enemyMaterial);
+        }
+
+        int mobilityForColor(const Position& pos, Color c,
+                             Bitboard& teamAttacks, unsigned& teamOutposts) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
             const bool scoreThreats = Tuning::eval().attackingPiecesWeight != 0;
 
@@ -85,6 +146,11 @@ namespace ironphoenix::Eval {
 
                     const int mobility = (attacks & ~blockedByTeam).popcount();
                     score += mobility * mobilityWeight(pt);
+                    // No second knight scan. Cap at TWO scored outposts
+                    // across Red+Yellow or Blue+Green, including promotions.
+                    if (pt == KNIGHT && Tuning::eval().knightOutpostBonus > 0
+                        && teamOutposts < 2 && usefulKnightOutpost(pos, c, sq))
+                        ++teamOutposts;
                     if (scoreThreats)
                         teamAttacks |= attacks;
                 }
@@ -258,11 +324,13 @@ namespace ironphoenix::Eval {
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
+            unsigned knightOutposts[2]{};
 
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
                 const int score = materialForColor(pos, c)
-                    + mobilityForColor(pos, c, attacks[teamOf(c)])
+                    + mobilityForColor(pos, c, attacks[teamOf(c)],
+                                       knightOutposts[teamOf(c)])
                     + knightDevelopmentForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
@@ -270,8 +338,10 @@ namespace ironphoenix::Eval {
                     team1 += score;
             }
 
-            team0 += attackingPiecesForTeam(pos, 0, attacks[0]);
-            team1 += attackingPiecesForTeam(pos, 1, attacks[1]);
+            team0 += attackingPiecesForTeam(pos, 0, attacks[0])
+                + int(knightOutposts[0]) * Tuning::eval().knightOutpostBonus;
+            team1 += attackingPiecesForTeam(pos, 1, attacks[1])
+                + int(knightOutposts[1]) * Tuning::eval().knightOutpostBonus;
 
             // Each team pays for potential knight checks against either
             // surviving king. Team-relative scoring handles all four turns.

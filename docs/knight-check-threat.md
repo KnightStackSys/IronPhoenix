@@ -18,7 +18,7 @@ Search resolves actual move ordering and whether the king can escape.
 
 ## Score and performance
 
-- **5 cp per potentially threatened allied king** (Red+Yellow or Blue+Green)
+- **5 cp per potentially threatened allied king when enabled** (Red+Yellow or Blue+Green)
 - **Maximum 10 cp per team**, even with many attacking knights
 - No penalty if the potential checking landing squares are occupied by
   the *knight's* team, if the target king is eliminated, or if the knight
@@ -34,11 +34,13 @@ examines destinations for the candidates. This reduces search overhead,
 but the resulting effect on actual NPS needs measurement.
 
 ```text
-setoption name EvalKnightCheckThreatPenalty value 5
+setoption name EvalKnightCheckThreatPenalty value 0
 ```
 
-Range **0–100**; `0` disables the term, allowing A/B tests without a
-separate binary. `ResetTuning` restores 5.
+Range **0–100**; the **default is now 0** after the combined knight
+experiment reportedly lost 20 Elo. For an independent check-threat
+experiment, set a positive value (e.g. 5). `ResetTuning` restores 0.
+See [revised knight activity](knight-activity.md) for the focused default.
 
 **Testing:** `ironphoenix_knight_check_threat` verifies knight masks, both
 friendly kings, both opponent teams, blocked landing squares, one penalty

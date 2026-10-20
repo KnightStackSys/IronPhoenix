@@ -38,11 +38,16 @@ namespace ironphoenix {
             int attackingPiecesWeight = 100;
             // Conservative trial: per king threatened by a one-move knight check.
             // 0 disables for A/B strength and performance testing.
-            int knightCheckThreatPenalty = 5;
-            // Experimental 4PC activity terms: no generic center bonus.
-            int knightDevelopmentBonus = 3;
-            int knightEnemyPressureBonus = 4;
-            int knightKingApproachBonus = 5;
+            // Failed combined knight-activity trial (~-20 Elo). Keep its
+            // options available for isolated A/B testing, disabled by default.
+            int knightCheckThreatPenalty = 0;
+            int knightDevelopmentBonus = 0;
+            int knightEnemyPressureBonus = 0;
+            int knightKingApproachBonus = 0;
+            // Focused trial: a pawn-backed knight operating in enemy
+            // territory, near enemy material and not challenged by a pawn.
+            // Scored at most twice per team; zero disables completely.
+            int knightOutpostBonus = 6;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

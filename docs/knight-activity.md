@@ -1,50 +1,56 @@
-# Knight development and enemy-side activity (4PC Teams HCE)
+# 4PC Teams knight evaluation: revised after failed strength test
 
-This evaluation experiment extends the `eval/knight-check-threat` branch
-with **small, independently tunable knight activity terms**.
+The combined first version of knight check-threat, moving from the back
+rank, enemy-piece proximity, and enemy-king proximity reportedly scored
+**approximately -20 Elo in a completed test**. It should not be merged
+unchanged. These four knobs now default to **0** and remain accessible
+only for independent, opt-in experiments.
 
-On the 160-square four-player cross board, occupying its geometric centre
-does **not** automatically receive a positional bonus. Instead, knights
-receive a development reward for leaving their own back rank/file, plus
-additional rewards for approaching enemies.
+## Revised default: small, tactical-context outpost (+6 cp)
 
-| Condition (per surviving player's knight) | Default |
-| --- | ---: |
-| Left its own back rank (RED rank 1, BLUE file a, YELLOW rank 14, GREEN file n) | +3 cp |
-| An alive enemy's non-king piece is within Chebyshev distance 2 | +4 cp |
-| An alive enemy king is within Chebyshev distance 4 | +5 cp |
+A surviving knight qualifies only when ALL of the following hold:
 
-Bonuses stack but the enemy-army bonus is **once per knight**, even if
-several enemy units are nearby. King approach counts **once per knight**,
-even if both opposing kings are close. A central knight with no nearby
-enemies earns only +3 cp for developing.
+1. It has moved at least three board coordinates inward from its own
+   home edge (different for Red, Blue, Yellow, and Green).
+2. A pawn owned by **the knight's player or the surviving partner**
+   defends the knight's current square.
+3. No currently alive opposing pawn attacks that square.
+4. The knight has entered an opposing player's home-side flank, using
+   that player's actual direction on the cross board.
+5. At least one enemy **non-king** piece is within Chebyshev distance 2.
 
-The code precomputes each square's radius-2 proximity mask at geometry
-startup and uses bitboard intersections rather than scanning enemy pieces
-each evaluation. Enemy king distance uses at most two small coordinate
-checks per knight. Eliminated opponents and own teammates are ignored.
+The bonus is **6 cp per qualifying knight, capped at two knights per
+team (12 cp)**. A bare central knight, undefended advanced knight,
+pawn-challenged knight, or knight far from enemy material gets no bonus.
+This is *not* a proof of full safety from enemy pieces or of a legal
+tactic—just a conservative positional signal.
 
-This is an experimental **static positional bonus**, not a proof that
-the knight is safe, legal to move, defended, or can attack the enemy next
-turn. The pre-existing one-move-away knight-check penalty is unchanged.
-
-### UCI tuning
+The outpost check runs **inside the existing knight mobility loop**
+and reuses precomputed pawn-attack lookup tables and local-proximity
+masks. The old four terms short-circuit when disabled. NNUE is unchanged.
 
 ```text
-setoption name EvalKnightDevelopmentBonus value 3
-setoption name EvalKnightEnemyPressureBonus value 4
-setoption name EvalKnightKingApproachBonus value 5
+setoption name EvalKnightOutpostBonus value 6
 ```
 
-Each ranges **0–50**, and `0` disables that *specific* term for A/B
-tests. `ResetTuning` restores defaults.
+Range 0–50, **0 disables** for A/B baseline. The earlier experimental
+options now default to 0:
 
-**HCE only:** NNUE scores remain authoritative when a net is loaded.
-Because these terms affect HCE static eval and pruning, use controlled
-four-player matched builds, consistent NNUE settings, and seat-swapped
-SPRT before claiming any strength improvement. Compare NPS and depth too.
+```text
+setoption name EvalKnightCheckThreatPenalty value 0
+setoption name EvalKnightDevelopmentBonus value 0
+setoption name EvalKnightEnemyPressureBonus value 0
+setoption name EvalKnightKingApproachBonus value 0
+```
 
-Note: This initial experiment is not explicitly game-phase tapered.
-Its design favors useful threats over generic centre control, which can
-be worthwhile in the opening and middlegame, but it may still need
-late-game tuning.
+`ResetTuning` restores these defaults. To fully match the old HCE
+without new knight heuristics, also set `EvalKnightOutpostBonus` to 0.
+
+## Validation / next strength test
+
+Build both engines in identical x64 Release mode with the same
+NNUE configuration, hash, threads, and four-player opening suite.
+Compare default revised branch against main, then repeat using
+`EvalKnightOutpostBonus=0` to isolate positional value versus
+overhead. Monitor NPS and depth as well as Elo. No Elo improvement
+is claimed until SPRT validates it.

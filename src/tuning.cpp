@@ -63,7 +63,8 @@ namespace ironphoenix::Tuning {
                 || name == "EvalKnightCheckThreatPenalty"
                 || name == "EvalKnightDevelopmentBonus"
                 || name == "EvalKnightEnemyPressureBonus"
-                || name == "EvalKnightKingApproachBonus";
+                || name == "EvalKnightKingApproachBonus"
+                || name == "EvalKnightOutpostBonus";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -170,6 +171,8 @@ namespace ironphoenix::Tuning {
             p.knightEnemyPressureBonus = value;
         else if (name == "EvalKnightKingApproachBonus" && inRange(value, 0, 50))
             p.knightKingApproachBonus = value;
+        else if (name == "EvalKnightOutpostBonus" && inRange(value, 0, 50))
+            p.knightOutpostBonus = value;
         else
             return false;
 
@@ -244,10 +247,11 @@ namespace ironphoenix::Tuning {
             << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
             << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
             << "option name EvalAttackingPiecesWeight type spin default 100 min 0 max 300\n"
-            << "option name EvalKnightCheckThreatPenalty type spin default 5 min 0 max 100\n"
-            << "option name EvalKnightDevelopmentBonus type spin default 3 min 0 max 50\n"
-            << "option name EvalKnightEnemyPressureBonus type spin default 4 min 0 max 50\n"
-            << "option name EvalKnightKingApproachBonus type spin default 5 min 0 max 50\n"
+            << "option name EvalKnightCheckThreatPenalty type spin default 0 min 0 max 100\n"
+            << "option name EvalKnightDevelopmentBonus type spin default 0 min 0 max 50\n"
+            << "option name EvalKnightEnemyPressureBonus type spin default 0 min 0 max 50\n"
+            << "option name EvalKnightKingApproachBonus type spin default 0 min 0 max 50\n"
+            << "option name EvalKnightOutpostBonus type spin default 6 min 0 max 50\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -281,7 +285,8 @@ namespace ironphoenix::Tuning {
             << " EvalKnightCheckThreatPenalty=" << e.knightCheckThreatPenalty
             << " EvalKnightDevelopmentBonus=" << e.knightDevelopmentBonus
             << " EvalKnightEnemyPressureBonus=" << e.knightEnemyPressureBonus
-            << " EvalKnightKingApproachBonus=" << e.knightKingApproachBonus << '\n';
+            << " EvalKnightKingApproachBonus=" << e.knightKingApproachBonus
+            << " EvalKnightOutpostBonus=" << e.knightOutpostBonus << '\n';
     }
 
 } // namespace ironphoenix::Tuning

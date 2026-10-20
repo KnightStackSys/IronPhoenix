@@ -59,9 +59,9 @@ int main() {
     Geometry::init();
     NNUE::unloadNetwork();
     Tuning::resetEval();
-    expect(Tuning::eval().knightDevelopmentBonus == 3, "development default 3");
-    expect(Tuning::eval().knightEnemyPressureBonus == 4, "pressure default 4");
-    expect(Tuning::eval().knightKingApproachBonus == 5, "king approach default 5");
+    expect(Tuning::eval().knightDevelopmentBonus == 0, "development disabled by default");
+    expect(Tuning::eval().knightEnemyPressureBonus == 0, "pressure disabled by default");
+    expect(Tuning::eval().knightKingApproachBonus == 0, "king approach disabled by default");
 
     // All four player orientations must use the proper home row or file.
     trial(RED, 'f', 1, 'f', 2);
@@ -135,14 +135,14 @@ int main() {
     expect(Tuning::eval().knightDevelopmentBonus == 8, "UCI value applied");
     Tuning::printUciOptions(out);
     Tuning::printCurrent(out);
-    expect(out.str().find("option name EvalKnightDevelopmentBonus type spin default 3 min 0 max 50") != std::string::npos,
+    expect(out.str().find("option name EvalKnightDevelopmentBonus type spin default 0 min 0 max 50") != std::string::npos,
            "option advertised");
     expect(out.str().find("EvalKnightEnemyPressureBonus=20") != std::string::npos,
            "current enemy proximity value shown");
     Tuning::resetEval();
-    expect(Tuning::eval().knightDevelopmentBonus == 3, "reset development");
-    expect(Tuning::eval().knightEnemyPressureBonus == 4, "reset pressure");
-    expect(Tuning::eval().knightKingApproachBonus == 5, "reset king approach");
+    expect(Tuning::eval().knightDevelopmentBonus == 0, "reset development");
+    expect(Tuning::eval().knightEnemyPressureBonus == 0, "reset pressure");
+    expect(Tuning::eval().knightKingApproachBonus == 0, "reset king approach");
 
     // Precomputed radius-two masks should match the full 14x14 geometry.
     for (unsigned s = 0; s < SQUARE_NB; ++s) {

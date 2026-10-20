@@ -49,7 +49,7 @@ int main() {
     Geometry::init();
     NNUE::unloadNetwork();
     Tuning::resetEval();
-    check(Tuning::eval().knightCheckThreatPenalty == 5, "default trial penalty");
+    check(Tuning::eval().knightCheckThreatPenalty == 0, "failed check-threat term defaults to off");
     for (unsigned king = 0; king < SQUARE_NB; ++king) {
         Bitboard expected{};
         Bitboard checkingSquares = Geometry::KnightAttacks[king];
@@ -139,12 +139,12 @@ int main() {
     check(Tuning::eval().knightCheckThreatPenalty == 7, "UCI setoption updates parameter");
     Tuning::printUciOptions(out);
     Tuning::printCurrent(out);
-    check(out.str().find("option name EvalKnightCheckThreatPenalty type spin default 5 min 0 max 100") != std::string::npos,
+    check(out.str().find("option name EvalKnightCheckThreatPenalty type spin default 0 min 0 max 100") != std::string::npos,
           "UCI option advertised");
     check(out.str().find("EvalKnightCheckThreatPenalty=7") != std::string::npos,
           "current tuning shows parameter");
     Tuning::resetEval();
-    check(Tuning::eval().knightCheckThreatPenalty == 5, "reset restores default");
+    check(Tuning::eval().knightCheckThreatPenalty == 0, "reset restores safe default");
 
     if (!failures)
         std::cout << "Knights one move from check: PASS\n";
