@@ -41,6 +41,7 @@ IronPhoenix includes a modern alpha-beta search stack designed specifically for 
 - Late Move Reductions (LMR)
 - Late Move Pruning (LMP)
 - Null Move Pruning (NMP)
+- Reverse Futility Pruning (RFP)
 - History Move Pruning (HMP)
 - Search pruning and reductions
 - Iterative deepening
