@@ -21,3 +21,5 @@ CMakeUserPresets.json
 /.vs
 /out
 /enc_temp_folder
+
+/web/*.exe
