@@ -181,6 +181,10 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_search_stack PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_search_stack COMMAND ironphoenix_search_stack)
 
+    add_executable(ironphoenix_bishop_pair tests/bishop_pair.cpp)
+    target_link_libraries(ironphoenix_bishop_pair PRIVATE IronPhoenix::Core)
+    add_test(NAME ironphoenix_bishop_pair COMMAND ironphoenix_bishop_pair)
+
     set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack PROPERTIES
         FOLDER "Tests"
     )

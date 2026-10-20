@@ -97,6 +97,20 @@ namespace ironphoenix::Eval {
                 + mobilityForColor(pos, c);
         }
 
+        int teamBishopPair(const Position& pos, Color first, Color partner) noexcept {
+            Bitboard bishops = pos.pieces(first, BISHOP) | pos.pieces(partner, BISHOP);
+            unsigned colors = 0;
+            while (bishops) {
+                const Square square = popLsb(bishops);
+                // Dense square indices do not encode checkerboard color on the
+                // cross board. Use the absolute file/rank coordinates instead.
+                colors |= 1u << ((Geometry::fileOf(square) + Geometry::rankOf(square)) & 1u);
+                if (colors == 3u)
+                    return Tuning::eval().bishopPairBonus;
+            }
+            return 0;
+        }
+
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0;
             int team1 = 0;
@@ -111,6 +125,10 @@ namespace ironphoenix::Eval {
                     team1 += score;
             }
 
+            // One bonus per team, including complementary bishops split
+            // between partners. Multiple bishops of one color are not a pair.
+            team0 += teamBishopPair(pos, RED, YELLOW);
+            team1 += teamBishopPair(pos, BLUE, GREEN);
             const int score = team0 - team1;
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }

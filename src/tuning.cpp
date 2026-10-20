@@ -53,6 +53,7 @@ namespace ironphoenix::Tuning {
             return name == "EvalPawnValue"
                 || name == "EvalKnightValue"
                 || name == "EvalBishopValue"
+                || name == "EvalBishopPairBonus"
                 || name == "EvalRookValue"
                 || name == "EvalQueenValue"
                 || name == "EvalKnightMobility"
@@ -143,6 +144,8 @@ namespace ironphoenix::Tuning {
             p.knightValue = value;
         else if (name == "EvalBishopValue" && inRange(value, 0, 5000))
             p.bishopValue = value;
+        else if (name == "EvalBishopPairBonus" && inRange(value, 0, 1000))
+            p.bishopPairBonus = value;
         else if (name == "EvalRookValue" && inRange(value, 0, 5000))
             p.rookValue = value;
         else if (name == "EvalQueenValue" && inRange(value, 0, 5000))
@@ -222,6 +225,7 @@ namespace ironphoenix::Tuning {
             << "option name EvalPawnValue type spin default 100 min 0 max 5000\n"
             << "option name EvalKnightValue type spin default 300 min 0 max 5000\n"
             << "option name EvalBishopValue type spin default 400 min 0 max 5000\n"
+            << "option name EvalBishopPairBonus type spin default 40 min 0 max 1000\n"
             << "option name EvalRookValue type spin default 500 min 0 max 5000\n"
             << "option name EvalQueenValue type spin default 1000 min 0 max 5000\n"
             << "option name EvalKnightMobility type spin default 4 min -100 max 100\n"
@@ -251,6 +255,7 @@ namespace ironphoenix::Tuning {
         out << "info string EvalPawnValue=" << e.pawnValue
             << " EvalKnightValue=" << e.knightValue
             << " EvalBishopValue=" << e.bishopValue
+            << " EvalBishopPairBonus=" << e.bishopPairBonus
             << " EvalRookValue=" << e.rookValue
             << " EvalQueenValue=" << e.queenValue
             << " EvalKnightMobility=" << e.knightMobility

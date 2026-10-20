@@ -30,6 +30,7 @@ namespace ironphoenix {
             int bishopValue = 400;
             int rookValue = 500;
             int queenValue = 1000;
+            int bishopPairBonus = 40;
             int knightMobility = 4;
             int bishopMobility = 4;
             int rookMobility = 2;
