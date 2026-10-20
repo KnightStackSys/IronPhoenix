@@ -33,6 +33,9 @@ public:
     void clear() noexcept;
 
     [[nodiscard]] int quietScore(Color mover, Move move) const noexcept;
+    // Pawn-history: condition ANY quiet move on all four players' pawn
+    // structures. This is not history exclusive to pawn moves.
+    [[nodiscard]] int pawnScore(Key pawnKey, Piece movingPiece, Square to) const noexcept;
     [[nodiscard]] int captureScore(Color mover, Piece attacker, Move move) const noexcept;
     [[nodiscard]] int continuationScore(ContinuationKind kind,
                                         const HistoryContext& previous,
@@ -41,6 +44,7 @@ public:
     [[nodiscard]] Move counterMove(Color responder, const HistoryContext& previous) const noexcept;
 
     void updateQuiet(Color mover, Move move, int bonus) noexcept;
+    void updatePawn(Key pawnKey, Piece movingPiece, Square to, int bonus) noexcept;
     void updateCapture(Color mover, Piece attacker, Move move, int bonus) noexcept;
     void updateContinuation(ContinuationKind kind,
                             const HistoryContext& previous,
@@ -52,6 +56,11 @@ public:
 private:
     static constexpr std::size_t QUIET_COUNT =
         static_cast<std::size_t>(COLOR_NB) * SQUARE_NB * SQUARE_NB;
+
+    // 256 structure buckets x 32 color-coded piece IDs x 160 squares,
+    // approximately 2.5 MiB of saturated 16-bit entries.
+    static constexpr std::size_t PAWN_BUCKETS = 256;
+    static constexpr std::size_t PAWN_COUNT = PAWN_BUCKETS * 32 * SQUARE_NB;
 
     static constexpr std::size_t CAPTURE_COUNT =
         static_cast<std::size_t>(COLOR_NB) * PIECE_TYPE_NB * SQUARE_NB
@@ -65,12 +74,14 @@ private:
         static_cast<std::size_t>(COLOR_NB) * COLOR_NB * PIECE_TYPE_NB * SQUARE_NB;
 
     std::unique_ptr<std::int16_t[]> quiet_;
+    std::unique_ptr<std::int16_t[]> pawn_;
     std::unique_ptr<std::int16_t[]> capture_;
     std::unique_ptr<std::int16_t[]> continuationPrevious_;
     std::unique_ptr<std::int16_t[]> continuationSamePlayer_;
     std::unique_ptr<std::uint32_t[]> counter_;
 
     [[nodiscard]] static std::size_t quietIndex(Color mover, Move move) noexcept;
+    [[nodiscard]] static std::size_t pawnIndex(Key pawnKey, Piece movingPiece, Square to) noexcept;
     [[nodiscard]] static std::size_t captureIndex(Color mover, Piece attacker, Move move) noexcept;
     [[nodiscard]] static std::size_t continuationIndex(const HistoryContext& previous,
                                                        Piece currentPiece,

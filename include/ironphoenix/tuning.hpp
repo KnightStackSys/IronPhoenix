@@ -16,6 +16,8 @@ namespace ironphoenix {
             int seePruneMarginPerDepth = 80;
             int historyBonusScale = 64;
             int historyBonusMax = 2048;
+            // 0 disables pawn-history scoring/learning for A/B testing.
+            int pawnHistoryWeight = 50;
             int counterMoveBonus = 32'000;
             int checkMoveBonus = 10'000'000;
             int lmrMinDepth = 3;

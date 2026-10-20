@@ -362,6 +362,11 @@ namespace ironphoenix {
         }
 
         int score = history_.quietScore(mover, move);
+        // Pawn-structure-conditioned quiet ordering. The pawn signature is
+        // maintained incrementally, so there is no scan of all pawns here.
+        if (tuning.pawnHistoryWeight > 0)
+            score += history_.pawnScore(pos.pawnKey(), movingPiece, move.to())
+                * tuning.pawnHistoryWeight / 100;
 
         if (ply > 0 && searchStack_[ply].history.valid()) {
             score += history_.continuationScore(ContinuationKind::PreviousPly, searchStack_[ply].history, movingPiece, move.to());
@@ -439,6 +444,8 @@ namespace ironphoenix {
         const int penalty = -std::max(32, bonus / 2);
 
         history_.updateQuiet(mover, cutoffMove, bonus);
+        if (Tuning::search().pawnHistoryWeight > 0)
+            history_.updatePawn(pos.pawnKey(), movingPiece, cutoffMove.to(), bonus);
 
         if (ply > 0 && searchStack_[ply].history.valid()) {
             history_.updateContinuation(ContinuationKind::PreviousPly, searchStack_[ply].history, movingPiece, cutoffMove.to(), bonus);
@@ -458,6 +465,8 @@ namespace ironphoenix {
                 continue;
 
             history_.updateQuiet(mover, failed, penalty);
+            if (Tuning::search().pawnHistoryWeight > 0)
+                history_.updatePawn(pos.pawnKey(), failedPiece, failed.to(), penalty);
             if (ply > 0 && searchStack_[ply].history.valid())
                 history_.updateContinuation(ContinuationKind::PreviousPly, searchStack_[ply].history, failedPiece, failed.to(), penalty);
 
