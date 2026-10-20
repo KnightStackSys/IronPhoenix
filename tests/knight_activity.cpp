@@ -83,13 +83,22 @@ int main() {
         expect(delta(p) == 3, "allied piece near knight is not enemy pressure");
         p.erasePiece(sq('h',8));
         p.placePiece(sq('h',8),makePiece(BLUE,PAWN));
-        p.placePiece(sq('h',9),makePiece(GREEN,KNIGHT));
+        p.placePiece(sq('h',9),makePiece(GREEN,PAWN));
         p.finalizeSetup();
-        expect(delta(p) == 7, "several nearby enemy pieces count once per knight");
+        expect(delta(p) == 7, "several nearby enemy non-knights count once per knight");
         p.setAliveMask(0xDu); // Blue eliminated; Green stays active.
         p.erasePiece(sq('h',9));
         p.finalizeSetup();
         expect(delta(p) == 3, "eliminated opponent army does not count");
+    }
+    {
+        auto p = kings();
+        p.placePiece(sq('g',7), makePiece(RED, KNIGHT));
+        p.placePiece(sq('h',9), makePiece(GREEN, KNIGHT));
+        p.finalizeSetup();
+        // Both knights receive development and nearby enemy-piece bonuses;
+        // their identical +7 scores cancel for a team-relative zero.
+        expect(delta(p) == 0, "opposing knight activity cancels symmetrically");
     }
     {
         auto p = kings();
