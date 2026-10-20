@@ -204,7 +204,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_knight_activity PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_knight_activity COMMAND ironphoenix_knight_activity)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces ironphoenix_knight_check_threat ironphoenix_knight_activity PROPERTIES
+    add_executable(ironphoenix_knight_outpost tests/knight_outpost.cpp)
+    target_link_libraries(ironphoenix_knight_outpost PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces ironphoenix_knight_check_threat ironphoenix_knight_activity ironphoenix_knight_outpost PROPERTIES
         FOLDER "Tests"
     )
 endif()
