@@ -33,6 +33,9 @@ extern std::array<Bitboard, SQUARE_NB> KnightAttacks;
 // Current knight squares from which one further knight move COULD check
 // the king on the indexed square (ignores dynamically blocked landings).
 extern std::array<Bitboard, SQUARE_NB> KnightCheckApproach;
+// Precomputed Chebyshev-distance <= 2 zones for knight activity near
+// opposing non-king pieces. Reuse rather than scanning every enemy piece.
+extern std::array<Bitboard, SQUARE_NB> KnightEnemyProximity;
 extern std::array<Bitboard, SQUARE_NB> KingAttacks;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers;

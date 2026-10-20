@@ -39,6 +39,10 @@ namespace ironphoenix {
             // Conservative trial: per king threatened by a one-move knight check.
             // 0 disables for A/B strength and performance testing.
             int knightCheckThreatPenalty = 5;
+            // Experimental 4PC activity terms: no generic center bonus.
+            int knightDevelopmentBonus = 3;
+            int knightEnemyPressureBonus = 4;
+            int knightKingApproachBonus = 5;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

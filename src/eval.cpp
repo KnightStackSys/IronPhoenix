@@ -5,6 +5,9 @@
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/tuning.hpp"
 
+#include <algorithm>
+#include <cstdlib>
+
 namespace ironphoenix::Eval {
 
     namespace {
@@ -179,6 +182,79 @@ namespace ironphoenix::Eval {
             return penalty * threatenedKings;
         }
 
+        // The cross-board centre is not automatically a strong knight
+        // square in 4PC Teams. Keep activity tied to development out of
+        // the player's own home row/file and proximity to enemy targets.
+        IRONPHOENIX_FORCE_INLINE bool knightOnBackRank(Color c, Square sq) noexcept {
+            switch (c) {
+            case RED:    return Geometry::rankOf(sq) == 0;
+            case BLUE:   return Geometry::fileOf(sq) == 0;
+            case YELLOW: return Geometry::rankOf(sq) == BOARD_RANKS - 1;
+            case GREEN:  return Geometry::fileOf(sq) == BOARD_FILES - 1;
+            }
+            return false;
+        }
+
+        int knightDevelopmentForColor(const Position& pos, Color c) noexcept {
+            const auto& tune = Tuning::eval();
+            if (!pos.isAlive(c)
+                || (tune.knightDevelopmentBonus == 0
+                    && tune.knightEnemyPressureBonus == 0
+                    && tune.knightKingApproachBonus == 0))
+                return 0;
+
+            const Color enemy0 = static_cast<Color>((static_cast<unsigned>(c) + 1u) & 3u);
+            const Color enemy1 = static_cast<Color>((static_cast<unsigned>(c) + 3u) & 3u);
+
+            Bitboard enemyPieces{};
+            if (tune.knightEnemyPressureBonus > 0) {
+                for (Color opponent : {enemy0, enemy1}) {
+                    if (!pos.isAlive(opponent))
+                        continue;
+                    enemyPieces |= pos.occupancy(opponent);
+                    const Square enemyKing = pos.kingSquare(opponent);
+                    if (enemyKing != SQ_NONE)
+                        enemyPieces.reset(enemyKing);
+                }
+            }
+
+            int result = 0;
+            Bitboard knights = pos.pieces(c, KNIGHT);
+            while (knights) {
+                const Square knight = popLsb(knights);
+                // The development reward is deliberately small and does
+                // NOT keep growing as a knight approaches the board centre.
+                if (tune.knightDevelopmentBonus > 0 && !knightOnBackRank(c, knight))
+                    result += tune.knightDevelopmentBonus;
+
+                // Target-oriented activity: enemy army nearby (not an
+                // unconditional bonus for occupying central squares).
+                if (tune.knightEnemyPressureBonus > 0
+                    && (Geometry::KnightEnemyProximity[knight] & enemyPieces))
+                    result += tune.knightEnemyPressureBonus;
+
+                // An opponent king within four squares matters on this
+                // larger board. Count the closest qualifying king once per
+                // knight, with no reward for pursuing allied kings.
+                if (tune.knightKingApproachBonus > 0) {
+                    for (Color opponent : {enemy0, enemy1}) {
+                        if (!pos.isAlive(opponent))
+                            continue;
+                        const Square king = pos.kingSquare(opponent);
+                        if (king == SQ_NONE)
+                            continue;
+                        const int dx = std::abs(int(Geometry::fileOf(knight)) - int(Geometry::fileOf(king)));
+                        const int dy = std::abs(int(Geometry::rankOf(knight)) - int(Geometry::rankOf(king)));
+                        if (std::max(dx, dy) <= 4) {
+                            result += tune.knightKingApproachBonus;
+                            break;
+                        }
+                    }
+                }
+            }
+            return result;
+        }
+
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
@@ -186,7 +262,8 @@ namespace ironphoenix::Eval {
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
                 const int score = materialForColor(pos, c)
-                    + mobilityForColor(pos, c, attacks[teamOf(c)]);
+                    + mobilityForColor(pos, c, attacks[teamOf(c)])
+                    + knightDevelopmentForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
                 else

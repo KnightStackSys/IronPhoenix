@@ -14,6 +14,7 @@ std::array<std::array<Square, 8>, SQUARE_NB> Step{};
 std::array<std::array<Bitboard, SQUARE_NB>, 8> Ray{};
 std::array<Bitboard, SQUARE_NB> KnightAttacks{};
 std::array<Bitboard, SQUARE_NB> KnightCheckApproach{};
+std::array<Bitboard, SQUARE_NB> KnightEnemyProximity{};
 std::array<Bitboard, SQUARE_NB> KingAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers{};
@@ -245,6 +246,24 @@ void initialize() {
         Bitboard checkingSquares = KnightAttacks[s];
         while (checkingSquares)
             KnightCheckApproach[s] |= KnightAttacks[popLsb(checkingSquares)];
+    }
+
+    // Cache two-square Chebyshev neighborhoods for activity against enemy
+    // non-king pieces. Board holes are naturally omitted via validXY().
+    for (unsigned s = 0; s < SQUARE_NB; ++s) {
+        const int file = FileOf[s];
+        const int rank = RankOf[s];
+        for (int df = -2; df <= 2; ++df) {
+            for (int dr = -2; dr <= 2; ++dr) {
+                if (df == 0 && dr == 0)
+                    continue;
+                const int nf = file + df;
+                const int nr = rank + dr;
+                if (validXY(nf, nr))
+                    KnightEnemyProximity[s].set(
+                        SquareFromXY[static_cast<unsigned>(nf)][static_cast<unsigned>(nr)]);
+            }
+        }
     }
 
     initializeLineTables();
