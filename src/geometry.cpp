@@ -13,6 +13,7 @@ std::array<std::uint8_t, SQUARE_NB> RankOf{};
 std::array<std::array<Square, 8>, SQUARE_NB> Step{};
 std::array<std::array<Bitboard, SQUARE_NB>, 8> Ray{};
 std::array<Bitboard, SQUARE_NB> KnightAttacks{};
+std::array<Bitboard, SQUARE_NB> KnightCheckApproach{};
 std::array<Bitboard, SQUARE_NB> KingAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers{};
@@ -235,6 +236,15 @@ void initialize() {
         addPawnAttack(YELLOW, sq, +1, -1);
         addPawnAttack(GREEN,  sq, -1, -1);
         addPawnAttack(GREEN,  sq, -1, +1);
+    }
+
+    // A knight can check a king on 'king' by landing on any square in
+    // KnightAttacks[king]. Precompute possible KNIGHT START squares for
+    // that next move; evaluation filters blocked landing squares at runtime.
+    for (unsigned s = 0; s < SQUARE_NB; ++s) {
+        Bitboard checkingSquares = KnightAttacks[s];
+        while (checkingSquares)
+            KnightCheckApproach[s] |= KnightAttacks[popLsb(checkingSquares)];
     }
 
     initializeLineTables();

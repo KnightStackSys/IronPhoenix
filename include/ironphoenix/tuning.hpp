@@ -36,6 +36,9 @@ namespace ironphoenix {
             int queenMobility = 1;
             // 100 = default pressure; 0 = disabled, for A/B tests.
             int attackingPiecesWeight = 100;
+            // Conservative trial: per king threatened by a one-move knight check.
+            // 0 disables for A/B strength and performance testing.
+            int knightCheckThreatPenalty = 5;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

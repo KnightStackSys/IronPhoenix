@@ -30,6 +30,9 @@ extern std::array<std::uint8_t, SQUARE_NB> RankOf;
 extern std::array<std::array<Square, 8>, SQUARE_NB> Step;
 extern std::array<std::array<Bitboard, SQUARE_NB>, 8> Ray;
 extern std::array<Bitboard, SQUARE_NB> KnightAttacks;
+// Current knight squares from which one further knight move COULD check
+// the king on the indexed square (ignores dynamically blocked landings).
+extern std::array<Bitboard, SQUARE_NB> KnightCheckApproach;
 extern std::array<Bitboard, SQUARE_NB> KingAttacks;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers;

@@ -194,7 +194,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_link_libraries(ironphoenix_attacking_pieces PRIVATE IronPhoenix::Core)
     add_test(NAME ironphoenix_attacking_pieces COMMAND ironphoenix_attacking_pieces)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces PROPERTIES
+    add_executable(ironphoenix_knight_check_threat tests/knight_check_threat.cpp)
+    target_link_libraries(ironphoenix_knight_check_threat PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_knight_check_threat PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_knight_check_threat COMMAND ironphoenix_knight_check_threat)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces ironphoenix_knight_check_threat PROPERTIES
         FOLDER "Tests"
     )
 endif()

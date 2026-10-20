@@ -126,6 +126,59 @@ namespace ironphoenix::Eval {
             return pressure * weight / 100;
         }
 
+        // Counts the *potential* to give a knight check with the attacking
+        // side's next knight move, not an already delivered knight check.
+        // This is only a pseudo-legal geometric threat: pins, tempo and
+        // whether the attacker will actually move are left to search.
+        // Cap at one penalty per threatened king, including partner's king.
+        IRONPHOENIX_FORCE_INLINE int imminentKnightCheckPenalty(
+            const Position& pos, Color ally0, Color ally1,
+            Color enemy0, Color enemy1) noexcept {
+            const int penalty = Tuning::eval().knightCheckThreatPenalty;
+            if (penalty <= 0)
+                return 0;
+
+            const Bitboard enemyKnights = (pos.isAlive(enemy0)
+                    ? pos.pieces(enemy0, KNIGHT) : Bitboard{})
+                | (pos.isAlive(enemy1)
+                    ? pos.pieces(enemy1, KNIGHT) : Bitboard{});
+            if (!enemyKnights)
+                return 0;
+
+            // Knights cannot jump onto squares occupied by their own team.
+            const Bitboard blocked = pos.occupancy(enemy0) | pos.occupancy(enemy1);
+            int threatenedKings = 0;
+
+            for (Color kingOwner : {ally0, ally1}) {
+                if (!pos.isAlive(kingOwner))
+                    continue;
+                const Square king = pos.kingSquare(kingOwner);
+                if (king == SQ_NONE)
+                    continue;
+
+                Bitboard candidateKnights = enemyKnights & Geometry::KnightCheckApproach[king];
+                if (!candidateKnights)
+                    continue;
+
+                const Bitboard destinations = Geometry::KnightAttacks[king] & ~blocked;
+                if (!destinations)
+                    continue;
+
+                while (candidateKnights) {
+                    const Square knight = popLsb(candidateKnights);
+                    // Don't conflate an existing knight check with a
+                    // possible checking move in the future.
+                    if (Geometry::KnightAttacks[knight].test(king))
+                        continue;
+                    if (Geometry::KnightAttacks[knight] & destinations) {
+                        ++threatenedKings;
+                        break;
+                    }
+                }
+            }
+            return penalty * threatenedKings;
+        }
+
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
@@ -142,6 +195,11 @@ namespace ironphoenix::Eval {
 
             team0 += attackingPiecesForTeam(pos, 0, attacks[0]);
             team1 += attackingPiecesForTeam(pos, 1, attacks[1]);
+
+            // Each team pays for potential knight checks against either
+            // surviving king. Team-relative scoring handles all four turns.
+            team0 -= imminentKnightCheckPenalty(pos, RED, YELLOW, BLUE, GREEN);
+            team1 -= imminentKnightCheckPenalty(pos, BLUE, GREEN, RED, YELLOW);
 
             const int score = team0 - team1;
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
