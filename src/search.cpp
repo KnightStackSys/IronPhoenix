@@ -16,22 +16,6 @@
 namespace ironphoenix {
     namespace {
 
-        constexpr int LMP_HISTORY_THRESHOLD = 2'000;
-
-        // History Move Pruning (HMP): only prune very poorly scoring quiet
-        // moves at shallow non-PV nodes. The threshold becomes more conservative
-        // with depth because deeper nodes deserve more tactical coverage.
-        constexpr int HISTORY_MOVE_PRUNE_MAX_DEPTH = 4;
-        constexpr int HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH = 1'500;
-
-        constexpr int NULL_MOVE_MIN_DEPTH = 2;
-        constexpr int NULL_MOVE_DIVISOR = 190;
-        // More aggressive team-aware RFP experiment. Keep the established
-        // tactical / team-safety guards; adjust only depth and margins.
-        constexpr int REVERSE_FUTILITY_MAX_DEPTH = 6;
-        constexpr int REVERSE_FUTILITY_MARGIN_PER_DEPTH = 130;
-        constexpr int REVERSE_FUTILITY_MIN_MARGIN = 90;
-        constexpr int REVERSE_FUTILITY_MAX_IMPROVING_DISCOUNT = 80;
         constexpr std::size_t CHECK_BIT_WORDS = (MAX_MOVES + 63u) / 64u;
 
         // Non-PV nodes normally cut off quickly. Selecting only the strongest
@@ -763,7 +747,7 @@ namespace ironphoenix {
         // RFP estimates a fail-high in the side-to-move TEAM's perspective,
         // exactly as evaluate() does. Never negate for the partner. Keep this
         // out of null-move child nodes, root/PV nodes, checks and mate windows.
-        if (canStaticPrune && depth <= REVERSE_FUTILITY_MAX_DEPTH) {
+        if (canStaticPrune && depth <= tuning.rfpMaxDepth) {
             const int staticEval = evaluate(pos);
             recordStackEvaluation(ply, staticEval);
             // Search-stack evaluations are already team-relative. If a
@@ -772,10 +756,10 @@ namespace ironphoenix {
             // The bounded discount never turns this into a zero-margin
             // static-evaluation cutoff, even at depth one.
             const int improvingDiscount = ss.improving
-                ? std::min(REVERSE_FUTILITY_MAX_IMPROVING_DISCOUNT, ss.improvingRate / 3)
+                ? std::min(tuning.rfpMaxImprovingDiscount, ss.improvingRate / 3)
                 : 0;
-            const int margin = std::max(REVERSE_FUTILITY_MIN_MARGIN,
-                REVERSE_FUTILITY_MARGIN_PER_DEPTH * depth - improvingDiscount);
+            const int margin = std::max(tuning.rfpMinMargin,
+                tuning.rfpMarginPerDepth * depth - improvingDiscount);
             const int estimate = staticEval - margin;
             if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD
                 && estimate >= beta && reverseFutilitySafe(pos))
@@ -784,7 +768,7 @@ namespace ironphoenix {
 
         // Null Move Pruning (NMP): reuse the stack's raw evaluation when RFP
         // already evaluated this node. The existing NMP policy is unchanged.
-        if (canStaticPrune && depth >= NULL_MOVE_MIN_DEPTH) {
+        if (canStaticPrune && depth >= tuning.nullMoveMinDepth) {
             const int staticEval = ss.staticEvalValid ? ss.staticEval : evaluate(pos);
             if (!ss.staticEvalValid)
                 recordStackEvaluation(ply, staticEval);
@@ -796,7 +780,7 @@ namespace ironphoenix {
 
                     // Dynamic null-move reduction: reduce the depth more aggressively
                     // at deeper nodes and for higher static evaluations.
-                    const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / NULL_MOVE_DIVISOR);
+                    const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / tuning.nullMoveDivisor);
                     const int nullScore = -negamax(
                         pos,
                         depth - reduction,
@@ -893,11 +877,11 @@ namespace ironphoenix {
                 && move != ttMove && !moveMateWindow;
             const bool lmpCandidate = canPruneMove && quiet
                 && legalMoves >= 3 + depth * depth
-                && lmrHistoryScore < LMP_HISTORY_THRESHOLD;
+                && lmrHistoryScore < tuning.lmpHistoryThreshold;
             const bool hmpCandidate = canPruneMove && quiet
-                && depth <= HISTORY_MOVE_PRUNE_MAX_DEPTH
+                && depth <= tuning.hmpMaxDepth
                 && legalMoves > 0
-                && lmrHistoryScore < -HISTORY_MOVE_PRUNE_MARGIN_PER_DEPTH * depth;
+                && lmrHistoryScore < -tuning.hmpMarginPerDepth * depth;
             const bool seeCandidate = canPruneMove && legalMoves > 0
                 && depth <= tuning.seePruneMaxDepth
                 && move.isCapture() && !move.isPromotion();
