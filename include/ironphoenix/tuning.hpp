@@ -22,6 +22,15 @@ namespace ironphoenix {
             int lmrFullMoves = 3;
             int lmrBaseX100 = 75;
             int lmrDivisorX100 = 275;
+            int lmpHistoryThreshold = 2000;
+            int hmpMaxDepth = 4;
+            int hmpMarginPerDepth = 1500;
+            int nullMoveMinDepth = 2;
+            int nullMoveDivisor = 190;
+            int rfpMaxDepth = 6;
+            int rfpMarginPerDepth = 130;
+            int rfpMinMargin = 90;
+            int rfpMaxImprovingDiscount = 80;
         };
 
         struct EvalParameters final {
