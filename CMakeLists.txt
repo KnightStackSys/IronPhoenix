@@ -194,7 +194,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_link_libraries(ironphoenix_attacking_pieces PRIVATE IronPhoenix::Core)
     add_test(NAME ironphoenix_attacking_pieces COMMAND ironphoenix_attacking_pieces)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces PROPERTIES
+    add_executable(ironphoenix_queen_infiltration tests/queen_infiltration.cpp)
+    target_link_libraries(ironphoenix_queen_infiltration PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_queen_infiltration PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_queen_infiltration COMMAND ironphoenix_queen_infiltration)
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces ironphoenix_queen_infiltration PROPERTIES
         FOLDER "Tests"
     )
 endif()

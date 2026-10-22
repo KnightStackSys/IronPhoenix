@@ -45,6 +45,8 @@ namespace ironphoenix {
             int queenMobility = 5;
             // 100 = default pressure; 0 = disabled, for A/B tests.
             int attackingPiecesWeight = 100;
+            // Experimental enemy-king camp penetration bonus. Zero disables.
+            int queenInfiltration = 2;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;
