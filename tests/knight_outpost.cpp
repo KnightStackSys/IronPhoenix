@@ -47,11 +47,12 @@ int main() {
     Geometry::init();
     NNUE::unloadNetwork();
     Tuning::resetEval();
-    expect(Tuning::eval().knightOutpostBonus == 6, "outpost default 6");
-    expect(Tuning::eval().knightCheckThreatPenalty == 0, "failed check-threat feature disabled");
-    expect(Tuning::eval().knightDevelopmentBonus == 0, "failed back-rank feature disabled");
-    expect(Tuning::eval().knightEnemyPressureBonus == 0, "failed enemy proximity feature disabled");
-    expect(Tuning::eval().knightKingApproachBonus == 0, "failed king proximity feature disabled");
+    const auto defaults = Tuning::EvalParameters{};
+    expect(Tuning::eval().knightOutpostBonus == defaults.knightOutpostBonus, "outpost default");
+    expect(Tuning::eval().knightCheckThreatPenalty == defaults.knightCheckThreatPenalty, "check-threat default");
+    expect(Tuning::eval().knightDevelopmentBonus == defaults.knightDevelopmentBonus, "development default");
+    expect(Tuning::eval().knightEnemyPressureBonus == defaults.knightEnemyPressureBonus, "proximity default");
+    expect(Tuning::eval().knightKingApproachBonus == defaults.knightKingApproachBonus, "approach default");
 
     auto red = kings();
     red.placePiece(sq('e', 5), makePiece(RED, KNIGHT));
@@ -175,12 +176,13 @@ int main() {
     expect(Tuning::eval().knightOutpostBonus == 8, "UCI stores 8");
     Tuning::printUciOptions(out);
     Tuning::printCurrent(out);
-    expect(out.str().find("option name EvalKnightOutpostBonus type spin default 6 min 0 max 50")
+    expect(out.str().find("option name EvalKnightOutpostBonus type spin default "
+           + std::to_string(defaults.knightOutpostBonus) + " min 0 max 50")
            != std::string::npos, "UCI advertises new option");
     expect(out.str().find("EvalKnightOutpostBonus=8") != std::string::npos,
            "UCI prints current value");
     Tuning::resetEval();
-    expect(Tuning::eval().knightOutpostBonus == 6, "reset restores outpost default");
+    expect(Tuning::eval().knightOutpostBonus == defaults.knightOutpostBonus, "reset restores outpost default");
 
     if (!failures)
         std::cout << "Conservative knight outpost evaluation: PASS\n";

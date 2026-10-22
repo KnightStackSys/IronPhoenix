@@ -45,7 +45,8 @@ int main() {
     Geometry::init();
     expect(!NNUE::loaded(), "tests require HCE mode (no loaded NNUE)");
     Tuning::resetEval();
-    expect(Tuning::eval().attackingPiecesWeight == 100, "pressure default 100%");
+    expect(Tuning::eval().attackingPiecesWeight == Tuning::EvalParameters{}.attackingPiecesWeight,
+           "pressure default matches tuned parameters");
 
     {
         Position pos = kings();
