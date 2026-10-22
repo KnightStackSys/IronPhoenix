@@ -263,10 +263,10 @@ namespace ironphoenix::Tuning {
             << "option name EvalBishopValue type spin default 390 min 0 max 5000\n"
             << "option name EvalRookValue type spin default 497 min 0 max 5000\n"
             << "option name EvalQueenValue type spin default 1011 min 0 max 5000\n"
-            << "option name EvalKnightMobility type spin default 4 min -100 max 100\n"
+            << "option name EvalKnightMobility type spin default 5 min -100 max 100\n"
             << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
-            << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
-            << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
+            << "option name EvalRookMobility type spin default 4 min -100 max 100\n"
+            << "option name EvalQueenMobility type spin default 5 min -100 max 100\n"
             << "option name EvalAttackingPiecesWeight type spin default 100 min 0 max 300\n"
             << "option name ResetTuning type button\n";
     }
