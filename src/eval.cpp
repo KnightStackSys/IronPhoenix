@@ -1,4 +1,5 @@
 #include "ironphoenix/eval.hpp"
+#include "ironphoenix/bishop_eval.hpp"
 
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/nnue.hpp"
@@ -347,6 +348,11 @@ namespace ironphoenix::Eval {
             // surviving king. Team-relative scoring handles all four turns.
             team0 -= imminentKnightCheckPenalty(pos, RED, YELLOW, BLUE, GREEN);
             team1 -= imminentKnightCheckPenalty(pos, BLUE, GREEN, RED, YELLOW);
+
+            // Team-wise complementary bishop coverage and four seat-oriented
+            // pawn/king structures. All new feature weights default to zero.
+            team0 += bishopFeaturesForTeam(pos, 0);
+            team1 += bishopFeaturesForTeam(pos, 1);
 
             const int score = team0 - team1;
             return teamOf(pos.sideToMove()) == 0 ? score : -score;

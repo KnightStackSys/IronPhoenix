@@ -73,7 +73,13 @@ namespace ironphoenix::Tuning {
                 || name == "EvalKnightDevelopmentBonus"
                 || name == "EvalKnightEnemyPressureBonus"
                 || name == "EvalKnightKingApproachBonus"
-                || name == "EvalKnightOutpostBonus";
+                || name == "EvalKnightOutpostBonus"
+                || name == "EvalBadBishopPenalty"
+                || name == "EvalBishopPairBonus"
+                || name == "EvalBishopVsKnightBonus"
+                || name == "EvalBishopColorWeaknessPenalty"
+                || name == "EvalBishopFianchettoBonus"
+                || name == "EvalBishopReturningBonus";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -200,6 +206,18 @@ namespace ironphoenix::Tuning {
             p.knightKingApproachBonus = value;
         else if (name == "EvalKnightOutpostBonus" && inRange(value, 0, 50))
             p.knightOutpostBonus = value;
+        else if (name == "EvalBadBishopPenalty" && inRange(value, 0, 100))
+            p.badBishopPenalty = value;
+        else if (name == "EvalBishopPairBonus" && inRange(value, 0, 100))
+            p.bishopPairBonus = value;
+        else if (name == "EvalBishopVsKnightBonus" && inRange(value, 0, 100))
+            p.bishopVsKnightBonus = value;
+        else if (name == "EvalBishopColorWeaknessPenalty" && inRange(value, 0, 100))
+            p.bishopColorWeaknessPenalty = value;
+        else if (name == "EvalBishopFianchettoBonus" && inRange(value, 0, 100))
+            p.bishopFianchettoBonus = value;
+        else if (name == "EvalBishopReturningBonus" && inRange(value, 0, 100))
+            p.bishopReturningBonus = value;
         else
             return false;
 
@@ -288,6 +306,12 @@ namespace ironphoenix::Tuning {
             << "option name EvalKnightEnemyPressureBonus type spin default 4 min 0 max 50\n"
             << "option name EvalKnightKingApproachBonus type spin default 7 min 0 max 50\n"
             << "option name EvalKnightOutpostBonus type spin default 13 min 0 max 50\n"
+            << "option name EvalBadBishopPenalty type spin default 0 min 0 max 100\n"
+            << "option name EvalBishopPairBonus type spin default 0 min 0 max 100\n"
+            << "option name EvalBishopVsKnightBonus type spin default 0 min 0 max 100\n"
+            << "option name EvalBishopColorWeaknessPenalty type spin default 0 min 0 max 100\n"
+            << "option name EvalBishopFianchettoBonus type spin default 0 min 0 max 100\n"
+            << "option name EvalBishopReturningBonus type spin default 0 min 0 max 100\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -331,7 +355,13 @@ namespace ironphoenix::Tuning {
             << " EvalKnightDevelopmentBonus=" << e.knightDevelopmentBonus
             << " EvalKnightEnemyPressureBonus=" << e.knightEnemyPressureBonus
             << " EvalKnightKingApproachBonus=" << e.knightKingApproachBonus
-            << " EvalKnightOutpostBonus=" << e.knightOutpostBonus << '\n';
+            << " EvalKnightOutpostBonus=" << e.knightOutpostBonus
+            << " EvalBadBishopPenalty=" << e.badBishopPenalty
+            << " EvalBishopPairBonus=" << e.bishopPairBonus
+            << " EvalBishopVsKnightBonus=" << e.bishopVsKnightBonus
+            << " EvalBishopColorWeaknessPenalty=" << e.bishopColorWeaknessPenalty
+            << " EvalBishopFianchettoBonus=" << e.bishopFianchettoBonus
+            << " EvalBishopReturningBonus=" << e.bishopReturningBonus << '\n';
     }
 
 } // namespace ironphoenix::Tuning

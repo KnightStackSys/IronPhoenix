@@ -49,6 +49,13 @@ namespace ironphoenix {
             int knightEnemyPressureBonus = 4;
             int knightKingApproachBonus = 7;
             int knightOutpostBonus = 13;
+            // Experimental 4PC Teams bishop terms: off by default for A/B testing.
+            int badBishopPenalty = 0;
+            int bishopPairBonus = 0;
+            int bishopVsKnightBonus = 0;
+            int bishopColorWeaknessPenalty = 0;
+            int bishopFianchettoBonus = 0;
+            int bishopReturningBonus = 0;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

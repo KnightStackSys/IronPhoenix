@@ -23,6 +23,7 @@ add_library(ironphoenix_core STATIC
     src/lmr.cpp
     src/tt.cpp
     src/eval.cpp
+    src/bishop_eval.cpp
     src/nnue.cpp
     src/tuning.cpp
     src/search.cpp
@@ -32,6 +33,7 @@ add_library(ironphoenix_core STATIC
     src/preft.cpp
     src/uci.cpp
     include/ironphoenix/eval.hpp
+    include/ironphoenix/bishop_eval.hpp
     include/ironphoenix/search_stack.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
@@ -208,6 +210,13 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_link_libraries(ironphoenix_knight_outpost PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
+
+    add_executable(ironphoenix_bishop_features tests/bishop_features.cpp)
+    target_link_libraries(ironphoenix_bishop_features PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_bishop_features PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_bishop_features COMMAND ironphoenix_bishop_features)
+
+    set_target_properties(ironphoenix_bishop_features PROPERTIES FOLDER "Tests")
 
     set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces ironphoenix_knight_check_threat ironphoenix_knight_activity ironphoenix_knight_outpost PROPERTIES
         FOLDER "Tests"
