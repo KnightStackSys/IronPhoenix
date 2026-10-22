@@ -34,17 +34,21 @@ namespace ironphoenix {
         };
 
         struct EvalParameters final {
-            int pawnValue = 114;
-            int knightValue = 307;
-            int bishopValue = 390;
-            int rookValue = 497;
-            int queenValue = 1011;
-            int knightMobility = 5;
-            int bishopMobility = 4;
-            int rookMobility = 4;
-            int queenMobility = 5;
-            // 100 = default pressure; 0 = disabled, for A/B tests.
-            int attackingPiecesWeight = 100;
+            int pawnValue = 107;
+            int knightValue = 308;
+            int bishopValue = 394;
+            int rookValue = 504;
+            int queenValue = 1015;
+            int knightMobility = 9;
+            int bishopMobility = 7;
+            int rookMobility = 16;
+            int queenMobility = 10;
+            int attackingPiecesWeight = 98;
+            int knightCheckThreatPenalty = 9;
+            int knightDevelopmentBonus = 9;
+            int knightEnemyPressureBonus = 4;
+            int knightKingApproachBonus = 7;
+            int knightOutpostBonus = 13;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

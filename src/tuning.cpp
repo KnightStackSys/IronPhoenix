@@ -68,7 +68,12 @@ namespace ironphoenix::Tuning {
                 || name == "EvalBishopMobility"
                 || name == "EvalRookMobility"
                 || name == "EvalQueenMobility"
-                || name == "EvalAttackingPiecesWeight";
+                || name == "EvalAttackingPiecesWeight"
+                || name == "EvalKnightCheckThreatPenalty"
+                || name == "EvalKnightDevelopmentBonus"
+                || name == "EvalKnightEnemyPressureBonus"
+                || name == "EvalKnightKingApproachBonus"
+                || name == "EvalKnightOutpostBonus";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -185,6 +190,16 @@ namespace ironphoenix::Tuning {
             p.queenMobility = value;
         else if (name == "EvalAttackingPiecesWeight" && inRange(value, 0, 300))
             p.attackingPiecesWeight = value;
+        else if (name == "EvalKnightCheckThreatPenalty" && inRange(value, 0, 100))
+            p.knightCheckThreatPenalty = value;
+        else if (name == "EvalKnightDevelopmentBonus" && inRange(value, 0, 50))
+            p.knightDevelopmentBonus = value;
+        else if (name == "EvalKnightEnemyPressureBonus" && inRange(value, 0, 50))
+            p.knightEnemyPressureBonus = value;
+        else if (name == "EvalKnightKingApproachBonus" && inRange(value, 0, 50))
+            p.knightKingApproachBonus = value;
+        else if (name == "EvalKnightOutpostBonus" && inRange(value, 0, 50))
+            p.knightOutpostBonus = value;
         else
             return false;
 
@@ -259,15 +274,20 @@ namespace ironphoenix::Tuning {
             << "option name SearchRFPMinMargin type spin default 88 min 0 max 5000\n"
             << "option name SearchRFPMaxImprovingDiscount type spin default 78 min 0 max 5000\n"
             << "option name EvalPawnValue type spin default 114 min 0 max 5000\n"
-            << "option name EvalKnightValue type spin default 307 min 0 max 5000\n"
-            << "option name EvalBishopValue type spin default 390 min 0 max 5000\n"
-            << "option name EvalRookValue type spin default 497 min 0 max 5000\n"
-            << "option name EvalQueenValue type spin default 1011 min 0 max 5000\n"
-            << "option name EvalKnightMobility type spin default 5 min -100 max 100\n"
-            << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
-            << "option name EvalRookMobility type spin default 4 min -100 max 100\n"
-            << "option name EvalQueenMobility type spin default 5 min -100 max 100\n"
-            << "option name EvalAttackingPiecesWeight type spin default 100 min 0 max 300\n"
+            << "option name EvalKnightValue type spin default 308 min 0 max 5000\n"
+            << "option name EvalBishopValue type spin default 394 min 0 max 5000\n"
+            << "option name EvalRookValue type spin default 504 min 0 max 5000\n"
+            << "option name EvalQueenValue type spin default 1015 min 0 max 5000\n"
+            << "option name EvalKnightMobility type spin default 9 min -100 max 100\n"
+            << "option name EvalBishopMobility type spin default 7 min -100 max 100\n"
+            << "option name EvalRookMobility type spin default 16 min -100 max 100\n"
+            << "option name EvalQueenMobility type spin default 10 min -100 max 100\n"
+            << "option name EvalAttackingPiecesWeight type spin default 98 min 0 max 300\n"
+            << "option name EvalKnightCheckThreatPenalty type spin default 9 min 0 max 100\n"
+            << "option name EvalKnightDevelopmentBonus type spin default 9 min 0 max 50\n"
+            << "option name EvalKnightEnemyPressureBonus type spin default 4 min 0 max 50\n"
+            << "option name EvalKnightKingApproachBonus type spin default 7 min 0 max 50\n"
+            << "option name EvalKnightOutpostBonus type spin default 13 min 0 max 50\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -306,7 +326,12 @@ namespace ironphoenix::Tuning {
             << " EvalBishopMobility=" << e.bishopMobility
             << " EvalRookMobility=" << e.rookMobility
             << " EvalQueenMobility=" << e.queenMobility
-            << " EvalAttackingPiecesWeight=" << e.attackingPiecesWeight << '\n';
+            << " EvalAttackingPiecesWeight=" << e.attackingPiecesWeight
+            << " EvalKnightCheckThreatPenalty=" << e.knightCheckThreatPenalty
+            << " EvalKnightDevelopmentBonus=" << e.knightDevelopmentBonus
+            << " EvalKnightEnemyPressureBonus=" << e.knightEnemyPressureBonus
+            << " EvalKnightKingApproachBonus=" << e.knightKingApproachBonus
+            << " EvalKnightOutpostBonus=" << e.knightOutpostBonus << '\n';
     }
 
 } // namespace ironphoenix::Tuning

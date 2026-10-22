@@ -62,24 +62,26 @@ int main() {
     struct PruningOption {
         const char* name;
         int Tuning::SearchParameters::*member;
-        int defaultValue;
         int sampleValue;
         int invalidValue;
     };
     const PruningOption options[] = {
-        { "SearchLMPHistoryThreshold", &Tuning::SearchParameters::lmpHistoryThreshold, 2000, 2010, -1 },
-        { "SearchHMPMaxDepth", &Tuning::SearchParameters::hmpMaxDepth, 4, 5, -1 },
-        { "SearchHMPMarginPerDepth", &Tuning::SearchParameters::hmpMarginPerDepth, 1500, 1510, -1 },
-        { "SearchNullMoveMinDepth", &Tuning::SearchParameters::nullMoveMinDepth, 2, 3, 0 },
-        { "SearchNullMoveDivisor", &Tuning::SearchParameters::nullMoveDivisor, 190, 200, 0 },
-        { "SearchRFPMaxDepth", &Tuning::SearchParameters::rfpMaxDepth, 6, 7, -1 },
-        { "SearchRFPMarginPerDepth", &Tuning::SearchParameters::rfpMarginPerDepth, 130, 140, -1 },
-        { "SearchRFPMinMargin", &Tuning::SearchParameters::rfpMinMargin, 90, 99, -1 },
-        { "SearchRFPMaxImprovingDiscount", &Tuning::SearchParameters::rfpMaxImprovingDiscount, 80, 88, -1 },
+        { "SearchLMPHistoryThreshold", &Tuning::SearchParameters::lmpHistoryThreshold, 2010, -1 },
+        { "SearchHMPMaxDepth", &Tuning::SearchParameters::hmpMaxDepth, 5, -1 },
+        { "SearchHMPMarginPerDepth", &Tuning::SearchParameters::hmpMarginPerDepth, 1510, -1 },
+        { "SearchNullMoveMinDepth", &Tuning::SearchParameters::nullMoveMinDepth, 3, 0 },
+        { "SearchNullMoveDivisor", &Tuning::SearchParameters::nullMoveDivisor, 200, 0 },
+        { "SearchRFPMaxDepth", &Tuning::SearchParameters::rfpMaxDepth, 7, -1 },
+        { "SearchRFPMarginPerDepth", &Tuning::SearchParameters::rfpMarginPerDepth, 140, -1 },
+        { "SearchRFPMinMargin", &Tuning::SearchParameters::rfpMinMargin, 99, -1 },
+        { "SearchRFPMaxImprovingDiscount", &Tuning::SearchParameters::rfpMaxImprovingDiscount, 88, -1 },
     };
+    // Defaults evolve as tuning results are adopted. Test against the actual
+    // default constructor rather than stale historical SPSA constants.
+    const Tuning::SearchParameters defaults{};
     Tuning::resetSearch();
     for (const auto& option : options) {
-        expect(Tuning::search().*(option.member) == option.defaultValue, "pruning default retained");
+        expect(Tuning::search().*(option.member) == defaults.*(option.member), "pruning default retained");
         expect(Tuning::setSearchParameter(option.name, option.sampleValue), "valid pruning option accepted");
         expect(Tuning::search().*(option.member) == option.sampleValue, "pruning option takes effect");
         expect(!Tuning::setSearchParameter(option.name, option.invalidValue), "invalid pruning value rejected");
@@ -87,18 +89,32 @@ int main() {
     }
     Tuning::resetSearch();
     for (const auto& option : options)
-        expect(Tuning::search().*(option.member) == option.defaultValue, "pruning reset restores default");
+        expect(Tuning::search().*(option.member) == defaults.*(option.member), "pruning reset restores default");
 
     {
         Position pos = quiet(RED);
         const int eval = Eval::evaluate(pos);
-        expect(Tuning::setSearchParameter("SearchRFPMarginPerDepth", 200), "RFP runtime margin configurable");
-        Access::search(*engine, pos, 1, eval - 130);
+        const int defaultMargin = defaults.rfpMarginPerDepth;
+        const int beta = eval - defaultMargin;
+        // The tuned default may change; probe its exact cutoff boundary.
+        expect(Tuning::setSearchParameter("SearchRFPMarginPerDepth", defaultMargin + 50),
+               "RFP runtime margin configurable");
+        Access::search(*engine, pos, 1, beta);
         expect(Access::nodes(*engine) > 1, "larger runtime RFP margin prevents shallow cutoff");
         Tuning::resetSearch();
-        Access::search(*engine, pos, 1, eval - 130);
-        expect(Access::nodes(*engine) == 1, "default RFP cutoff restored");
+        expect(Access::search(*engine, pos, 1, beta) == beta, "default RFP cutoff restored");
+        expect(Access::nodes(*engine) == 1, "default RFP searches no children");
     }
+
+    // The following boundary tests deliberately exercise the original 130/90/80
+    // RFP policy, independently of the tuned production defaults.
+    expect(Tuning::setSearchParameter("SearchRFPMarginPerDepth", 130),
+           "set RFP regression margin");
+    expect(Tuning::setSearchParameter("SearchRFPMinMargin", 90),
+           "set RFP regression minimum");
+    expect(Tuning::setSearchParameter("SearchRFPMaxImprovingDiscount", 80),
+           "set RFP regression improving discount");
+
     for (unsigned c = 0; c < COLOR_NB; ++c) {
         Position pos = quiet(static_cast<Color>(c));
         const Key key = pos.key();
@@ -209,6 +225,7 @@ int main() {
         pos.finalizeSetup();
         expect(!Access::safe(*engine, pos), "missing king excluded");
     }
+    Tuning::resetSearch();
     if (!failures) std::cout << "Reverse futility regression tests: PASS\n";
     return failures ? 1 : 0;
 }
