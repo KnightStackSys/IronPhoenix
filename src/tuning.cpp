@@ -46,7 +46,16 @@ namespace ironphoenix::Tuning {
                 || name == "SearchLMRMinDepth"
                 || name == "SearchLMRFullMoves"
                 || name == "SearchLMRBaseX100"
-                || name == "SearchLMRDivisorX100";
+                || name == "SearchLMRDivisorX100"
+                || name == "SearchLMPHistoryThreshold"
+                || name == "SearchHMPMaxDepth"
+                || name == "SearchHMPMarginPerDepth"
+                || name == "SearchNullMoveMinDepth"
+                || name == "SearchNullMoveDivisor"
+                || name == "SearchRFPMaxDepth"
+                || name == "SearchRFPMarginPerDepth"
+                || name == "SearchRFPMinMargin"
+                || name == "SearchRFPMaxImprovingDiscount";
         }
 
         bool isEvalParameter(std::string_view name) noexcept {
@@ -131,6 +140,24 @@ namespace ironphoenix::Tuning {
             p.lmrBaseX100 = value;
         else if (name == "SearchLMRDivisorX100" && inRange(value, 25, 5000))
             p.lmrDivisorX100 = value;
+        else if (name == "SearchLMPHistoryThreshold" && inRange(value, 0, 20000))
+            p.lmpHistoryThreshold = value;
+        else if (name == "SearchHMPMaxDepth" && inRange(value, 0, 32))
+            p.hmpMaxDepth = value;
+        else if (name == "SearchHMPMarginPerDepth" && inRange(value, 0, 10000))
+            p.hmpMarginPerDepth = value;
+        else if (name == "SearchNullMoveMinDepth" && inRange(value, 1, 32))
+            p.nullMoveMinDepth = value;
+        else if (name == "SearchNullMoveDivisor" && inRange(value, 1, 5000))
+            p.nullMoveDivisor = value;
+        else if (name == "SearchRFPMaxDepth" && inRange(value, 0, 32))
+            p.rfpMaxDepth = value;
+        else if (name == "SearchRFPMarginPerDepth" && inRange(value, 0, 5000))
+            p.rfpMarginPerDepth = value;
+        else if (name == "SearchRFPMinMargin" && inRange(value, 0, 5000))
+            p.rfpMinMargin = value;
+        else if (name == "SearchRFPMaxImprovingDiscount" && inRange(value, 0, 5000))
+            p.rfpMaxImprovingDiscount = value;
         else
             changed = false;
 
@@ -235,17 +262,26 @@ namespace ironphoenix::Tuning {
             << "option name SearchCheckMoveBonus type spin default 10000000 min 0 max 50000000\n"
             << "option name SearchLMRMinDepth type spin default 3 min 1 max 32\n"
             << "option name SearchLMRFullMoves type spin default 3 min 0 max 128\n"
-            << "option name SearchLMRBaseX100 type spin default 75 min 0 max 1000\n"
-            << "option name SearchLMRDivisorX100 type spin default 275 min 25 max 5000\n"
-            << "option name EvalPawnValue type spin default 100 min 0 max 5000\n"
-            << "option name EvalKnightValue type spin default 300 min 0 max 5000\n"
-            << "option name EvalBishopValue type spin default 400 min 0 max 5000\n"
-            << "option name EvalRookValue type spin default 500 min 0 max 5000\n"
-            << "option name EvalQueenValue type spin default 1000 min 0 max 5000\n"
-            << "option name EvalKnightMobility type spin default 4 min -100 max 100\n"
+            << "option name SearchLMRBaseX100 type spin default 78 min 0 max 1000\n"
+            << "option name SearchLMRDivisorX100 type spin default 286 min 25 max 5000\n"
+            << "option name SearchLMPHistoryThreshold type spin default 2000 min 0 max 20000\n"
+            << "option name SearchHMPMaxDepth type spin default 4 min 0 max 32\n"
+            << "option name SearchHMPMarginPerDepth type spin default 1500 min 0 max 10000\n"
+            << "option name SearchNullMoveMinDepth type spin default 2 min 1 max 32\n"
+            << "option name SearchNullMoveDivisor type spin default 192 min 1 max 5000\n"
+            << "option name SearchRFPMaxDepth type spin default 6 min 0 max 32\n"
+            << "option name SearchRFPMarginPerDepth type spin default 141 min 0 max 5000\n"
+            << "option name SearchRFPMinMargin type spin default 88 min 0 max 5000\n"
+            << "option name SearchRFPMaxImprovingDiscount type spin default 78 min 0 max 5000\n"
+            << "option name EvalPawnValue type spin default 114 min 0 max 5000\n"
+            << "option name EvalKnightValue type spin default 307 min 0 max 5000\n"
+            << "option name EvalBishopValue type spin default 390 min 0 max 5000\n"
+            << "option name EvalRookValue type spin default 497 min 0 max 5000\n"
+            << "option name EvalQueenValue type spin default 1011 min 0 max 5000\n"
+            << "option name EvalKnightMobility type spin default 5 min -100 max 100\n"
             << "option name EvalBishopMobility type spin default 4 min -100 max 100\n"
-            << "option name EvalRookMobility type spin default 2 min -100 max 100\n"
-            << "option name EvalQueenMobility type spin default 1 min -100 max 100\n"
+            << "option name EvalRookMobility type spin default 4 min -100 max 100\n"
+            << "option name EvalQueenMobility type spin default 5 min -100 max 100\n"
             << "option name EvalAttackingPiecesWeight type spin default 100 min 0 max 300\n"
             << "option name EvalKnightCheckThreatPenalty type spin default 0 min 0 max 100\n"
             << "option name EvalKnightDevelopmentBonus type spin default 0 min 0 max 50\n"
@@ -270,7 +306,16 @@ namespace ironphoenix::Tuning {
             << " SearchLMRMinDepth=" << s.lmrMinDepth
             << " SearchLMRFullMoves=" << s.lmrFullMoves
             << " SearchLMRBaseX100=" << s.lmrBaseX100
-            << " SearchLMRDivisorX100=" << s.lmrDivisorX100 << '\n';
+            << " SearchLMRDivisorX100=" << s.lmrDivisorX100
+            << " SearchLMPHistoryThreshold=" << s.lmpHistoryThreshold
+            << " SearchHMPMaxDepth=" << s.hmpMaxDepth
+            << " SearchHMPMarginPerDepth=" << s.hmpMarginPerDepth
+            << " SearchNullMoveMinDepth=" << s.nullMoveMinDepth
+            << " SearchNullMoveDivisor=" << s.nullMoveDivisor
+            << " SearchRFPMaxDepth=" << s.rfpMaxDepth
+            << " SearchRFPMarginPerDepth=" << s.rfpMarginPerDepth
+            << " SearchRFPMinMargin=" << s.rfpMinMargin
+            << " SearchRFPMaxImprovingDiscount=" << s.rfpMaxImprovingDiscount << '\n';
 
         out << "info string EvalPawnValue=" << e.pawnValue
             << " EvalKnightValue=" << e.knightValue

@@ -1,5 +1,6 @@
 #include "ironphoenix/search.hpp"
 #include "ironphoenix/eval.hpp"
+#include "ironphoenix/tuning.hpp"
 #include "ironphoenix/movegen.hpp"
 #include <iostream>
 #include <memory>
@@ -56,6 +57,48 @@ int main() {
     Geometry::init();
     auto engine = std::make_unique<SearchEngine>();
     using Access = ReverseFutilityTestAccess;
+
+    // Verify the search options, bounds, and default-preserving reset.
+    struct PruningOption {
+        const char* name;
+        int Tuning::SearchParameters::*member;
+        int defaultValue;
+        int sampleValue;
+        int invalidValue;
+    };
+    const PruningOption options[] = {
+        { "SearchLMPHistoryThreshold", &Tuning::SearchParameters::lmpHistoryThreshold, 2000, 2010, -1 },
+        { "SearchHMPMaxDepth", &Tuning::SearchParameters::hmpMaxDepth, 4, 5, -1 },
+        { "SearchHMPMarginPerDepth", &Tuning::SearchParameters::hmpMarginPerDepth, 1500, 1510, -1 },
+        { "SearchNullMoveMinDepth", &Tuning::SearchParameters::nullMoveMinDepth, 2, 3, 0 },
+        { "SearchNullMoveDivisor", &Tuning::SearchParameters::nullMoveDivisor, 190, 200, 0 },
+        { "SearchRFPMaxDepth", &Tuning::SearchParameters::rfpMaxDepth, 6, 7, -1 },
+        { "SearchRFPMarginPerDepth", &Tuning::SearchParameters::rfpMarginPerDepth, 130, 140, -1 },
+        { "SearchRFPMinMargin", &Tuning::SearchParameters::rfpMinMargin, 90, 99, -1 },
+        { "SearchRFPMaxImprovingDiscount", &Tuning::SearchParameters::rfpMaxImprovingDiscount, 80, 88, -1 },
+    };
+    Tuning::resetSearch();
+    for (const auto& option : options) {
+        expect(Tuning::search().*(option.member) == option.defaultValue, "pruning default retained");
+        expect(Tuning::setSearchParameter(option.name, option.sampleValue), "valid pruning option accepted");
+        expect(Tuning::search().*(option.member) == option.sampleValue, "pruning option takes effect");
+        expect(!Tuning::setSearchParameter(option.name, option.invalidValue), "invalid pruning value rejected");
+        expect(Tuning::search().*(option.member) == option.sampleValue, "invalid input leaves setting unchanged");
+    }
+    Tuning::resetSearch();
+    for (const auto& option : options)
+        expect(Tuning::search().*(option.member) == option.defaultValue, "pruning reset restores default");
+
+    {
+        Position pos = quiet(RED);
+        const int eval = Eval::evaluate(pos);
+        expect(Tuning::setSearchParameter("SearchRFPMarginPerDepth", 200), "RFP runtime margin configurable");
+        Access::search(*engine, pos, 1, eval - 130);
+        expect(Access::nodes(*engine) > 1, "larger runtime RFP margin prevents shallow cutoff");
+        Tuning::resetSearch();
+        Access::search(*engine, pos, 1, eval - 130);
+        expect(Access::nodes(*engine) == 1, "default RFP cutoff restored");
+    }
     for (unsigned c = 0; c < COLOR_NB; ++c) {
         Position pos = quiet(static_cast<Color>(c));
         const Key key = pos.key();

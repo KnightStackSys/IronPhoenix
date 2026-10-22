@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="bin/iron-phoenix.png" alt="Iron Phoenix logo" width="700">
-</p>
-
-# 💻 IronPhoenix
+# 🔥 IronPhoenix
 
 **IronPhoenix** is a high-performance **4-player chess Teams engine** written in modern C++20.
 
