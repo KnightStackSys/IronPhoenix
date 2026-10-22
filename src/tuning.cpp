@@ -41,6 +41,7 @@ namespace ironphoenix::Tuning {
                 || name == "SearchSEEPruneMargin"
                 || name == "SearchHistoryBonusScale"
                 || name == "SearchHistoryBonusMax"
+                || name == "SearchPawnHistoryWeight"
                 || name == "SearchCounterMoveBonus"
                 || name == "SearchCheckMoveBonus"
                 || name == "SearchLMRMinDepth"
@@ -123,6 +124,8 @@ namespace ironphoenix::Tuning {
             p.historyBonusScale = value;
         else if (name == "SearchHistoryBonusMax" && inRange(value, 1, 32767))
             p.historyBonusMax = value;
+        else if (name == "SearchPawnHistoryWeight" && inRange(value, 0, 200))
+            p.pawnHistoryWeight = value;
         else if (name == "SearchCounterMoveBonus" && inRange(value, 0, 50'000'000))
             p.counterMoveBonus = value;
         else if (name == "SearchCheckMoveBonus" && inRange(value, 0, 50'000'000))
@@ -243,6 +246,7 @@ namespace ironphoenix::Tuning {
             << "option name SearchSEEPruneMargin type spin default 80 min 0 max 2000\n"
             << "option name SearchHistoryBonusScale type spin default 64 min 0 max 2048\n"
             << "option name SearchHistoryBonusMax type spin default 2048 min 1 max 32767\n"
+            << "option name SearchPawnHistoryWeight type spin default 50 min 0 max 200\n"
             << "option name SearchCounterMoveBonus type spin default 32000 min 0 max 50000000\n"
             << "option name SearchCheckMoveBonus type spin default 10000000 min 0 max 50000000\n"
             << "option name SearchLMRMinDepth type spin default 3 min 1 max 32\n"
@@ -281,6 +285,7 @@ namespace ironphoenix::Tuning {
             << " SearchSEEPruneMargin=" << s.seePruneMarginPerDepth
             << " SearchHistoryBonusScale=" << s.historyBonusScale
             << " SearchHistoryBonusMax=" << s.historyBonusMax
+            << " SearchPawnHistoryWeight=" << s.pawnHistoryWeight
             << " SearchCounterMoveBonus=" << s.counterMoveBonus
             << " SearchCheckMoveBonus=" << s.checkMoveBonus
             << " SearchLMRMinDepth=" << s.lmrMinDepth

@@ -27,6 +27,7 @@ namespace ironphoenix {
         rulesetId_ = 0;
         checkers_.clear();
         key_ = recomputeKey();
+        pawnKey_ = recomputePawnKey();
     }
 
     void Position::rawPut(Square sq, Piece p) noexcept {
@@ -41,6 +42,8 @@ namespace ironphoenix {
         if (pt == KING)
             kingSq_[c] = sq;
         key_ ^= Zobrist::PieceSquare[p][sq];
+        if (pt == PAWN)
+            pawnKey_ ^= Zobrist::PieceSquare[p][sq];
     }
 
     Piece Position::rawRemove(Square sq) noexcept {
@@ -59,6 +62,8 @@ namespace ironphoenix {
         if (pt == KING && kingSq_[c] == sq)
             kingSq_[c] = SQ_NONE;
         key_ ^= Zobrist::PieceSquare[p][sq];
+        if (pt == PAWN)
+            pawnKey_ ^= Zobrist::PieceSquare[p][sq];
         return p;
     }
 
@@ -138,8 +143,10 @@ namespace ironphoenix {
 
         const std::uint8_t changed = static_cast<std::uint8_t>(aliveMask_ ^ mask);
         for (unsigned c = 0; c < COLOR_NB; ++c)
-            if (changed & (1u << c))
+            if (changed & (1u << c)) {
                 key_ ^= Zobrist::Alive[c];
+                pawnKey_ ^= Zobrist::Alive[c];
+            }
         aliveMask_ = mask;
     }
 
@@ -147,7 +154,9 @@ namespace ironphoenix {
         id &= 0xF;
         if (rulesetId_ == id)
             return;
-        key_ ^= Zobrist::Ruleset[rulesetId_] ^ Zobrist::Ruleset[id];
+        const Key changed = Zobrist::Ruleset[rulesetId_] ^ Zobrist::Ruleset[id];
+        key_ ^= changed;
+        pawnKey_ ^= changed;
         rulesetId_ = id;
     }
 
@@ -160,6 +169,7 @@ namespace ironphoenix {
 
     void Position::finalizeSetup() {
         key_ = recomputeKey();
+        pawnKey_ = recomputePawnKey();
         refreshCheckers();
         assert(verify());
     }
@@ -466,6 +476,7 @@ namespace ironphoenix {
         assert(us == sideToMove_);
 
         st.key = key_;
+        st.pawnKey = pawnKey_;
         st.checkers = checkers_;
         st.enPassant = enPassant_;
         st.kingSq = kingSq_;
@@ -562,6 +573,7 @@ namespace ironphoenix {
         sideToMove_ = us;
         checkers_ = st.checkers;
         key_ = st.key;
+        pawnKey_ = st.pawnKey;
 
         assert(verify());
     }
@@ -570,6 +582,7 @@ namespace ironphoenix {
         const Color us = sideToMove_;
 
         st.key = key_;
+        st.pawnKey = pawnKey_;
         st.checkers = checkers_;
         st.enPassant = enPassant_;
         st.kingSq = kingSq_;
@@ -601,8 +614,22 @@ namespace ironphoenix {
         sideToMove_ = static_cast<Color>(st.side);
         checkers_ = st.checkers;
         key_ = st.key;
+        pawnKey_ = st.pawnKey;
 
         assert(verify());
+    }
+
+    Key Position::recomputePawnKey() const noexcept {
+        Key k = Zobrist::Ruleset[rulesetId_];
+        for (unsigned c = 0; c < COLOR_NB; ++c)
+            if (aliveMask_ & (1u << c))
+                k ^= Zobrist::Alive[c];
+        for (unsigned s = 0; s < SQUARE_NB; ++s) {
+            const Piece piece = board_[s];
+            if (piece != NO_PIECE && typeOf(piece) == PAWN)
+                k ^= Zobrist::PieceSquare[piece][s];
+        }
+        return k;
     }
 
     Key Position::recomputeKey() const noexcept {
@@ -668,7 +695,7 @@ namespace ironphoenix {
                 if (rebuiltPieces[c][pt] != pieceBB_[c][pt])
                     return false;
         }
-        return recomputeKey() == key_;
+        return recomputeKey() == key_ && recomputePawnKey() == pawnKey_;
     }
 
 }

@@ -8,6 +8,7 @@ namespace ironphoenix {
 
 HistoryTables::HistoryTables()
     : quiet_(std::make_unique<std::int16_t[]>(QUIET_COUNT)),
+      pawn_(std::make_unique<std::int16_t[]>(PAWN_COUNT)),
       capture_(std::make_unique<std::int16_t[]>(CAPTURE_COUNT)),
       continuationPrevious_(std::make_unique<std::int16_t[]>(CONTINUATION_COUNT)),
       continuationSamePlayer_(std::make_unique<std::int16_t[]>(CONTINUATION_COUNT)),
@@ -17,6 +18,7 @@ HistoryTables::HistoryTables()
 
 void HistoryTables::clear() noexcept {
     std::memset(quiet_.get(), 0, QUIET_COUNT * sizeof(std::int16_t));
+    std::memset(pawn_.get(), 0, PAWN_COUNT * sizeof(std::int16_t));
     std::memset(capture_.get(), 0, CAPTURE_COUNT * sizeof(std::int16_t));
     std::memset(continuationPrevious_.get(), 0, CONTINUATION_COUNT * sizeof(std::int16_t));
     std::memset(continuationSamePlayer_.get(), 0, CONTINUATION_COUNT * sizeof(std::int16_t));
@@ -25,6 +27,11 @@ void HistoryTables::clear() noexcept {
 
 std::size_t HistoryTables::quietIndex(Color mover, Move move) noexcept {
     return (static_cast<std::size_t>(mover) * SQUARE_NB + move.from()) * SQUARE_NB + move.to();
+}
+
+std::size_t HistoryTables::pawnIndex(Key pawnKey, Piece movingPiece, Square to) noexcept {
+    return ((static_cast<std::size_t>(pawnKey) & (PAWN_BUCKETS - 1))
+            * 32 + static_cast<unsigned>(movingPiece)) * SQUARE_NB + to;
 }
 
 std::size_t HistoryTables::captureIndex(Color mover, Piece attacker, Move move) noexcept {
@@ -73,6 +80,12 @@ int HistoryTables::quietScore(Color mover, Move move) const noexcept {
     return quiet_[quietIndex(mover, move)];
 }
 
+int HistoryTables::pawnScore(Key pawnKey, Piece movingPiece, Square to) const noexcept {
+    if (!isPiece(movingPiece) || to >= SQUARE_NB)
+        return 0;
+    return pawn_[pawnIndex(pawnKey, movingPiece, to)];
+}
+
 int HistoryTables::captureScore(Color mover, Piece attacker, Move move) const noexcept {
     if (!isPiece(attacker) || !move.isCapture())
         return 0;
@@ -99,6 +112,12 @@ Move HistoryTables::counterMove(Color responder, const HistoryContext& previous)
 
 void HistoryTables::updateQuiet(Color mover, Move move, int bonus) noexcept {
     updateEntry(quiet_[quietIndex(mover, move)], bonus);
+}
+
+void HistoryTables::updatePawn(Key pawnKey, Piece movingPiece, Square to, int bonus) noexcept {
+    if (!isPiece(movingPiece) || to >= SQUARE_NB)
+        return;
+    updateEntry(pawn_[pawnIndex(pawnKey, movingPiece, to)], bonus);
 }
 
 void HistoryTables::updateCapture(Color mover, Piece attacker, Move move, int bonus) noexcept {

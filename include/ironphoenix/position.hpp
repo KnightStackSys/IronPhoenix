@@ -24,6 +24,7 @@ struct CastleLane {
 
 struct StateInfo {
     Key key = 0;
+    Key pawnKey = 0;
     Bitboard checkers{};
     std::array<Square, COLOR_NB> enPassant{SQ_NONE, SQ_NONE, SQ_NONE, SQ_NONE};
     std::array<Square, COLOR_NB> kingSq{SQ_NONE, SQ_NONE, SQ_NONE, SQ_NONE};
@@ -63,6 +64,8 @@ public:
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE Square kingSquare(Color c) const noexcept { return kingSq_[c]; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE Color sideToMove() const noexcept { return sideToMove_; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE Key key() const noexcept { return key_; }
+    // All four colored pawn structures, alive mask and ruleset; no side to move.
+    [[nodiscard]] IRONPHOENIX_FORCE_INLINE Key pawnKey() const noexcept { return pawnKey_; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE std::uint8_t castlingRights() const noexcept { return castlingRights_; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE Square enPassant(Color c) const noexcept { return enPassant_[c]; }
     [[nodiscard]] IRONPHOENIX_FORCE_INLINE std::uint8_t aliveMask() const noexcept { return aliveMask_; }
@@ -130,6 +133,7 @@ public:
     void undoNullMove(const StateInfo& st);
 
     [[nodiscard]] Key recomputeKey() const noexcept;
+    [[nodiscard]] Key recomputePawnKey() const noexcept;
     [[nodiscard]] bool verify() const noexcept;
 
 private:
@@ -150,6 +154,7 @@ private:
     std::uint8_t aliveMask_ = 0xF;
     std::uint8_t rulesetId_ = 0;
     Key key_ = 0;
+    Key pawnKey_ = 0;
     Bitboard checkers_{};
 
     IRONPHOENIX_FORCE_INLINE void addLineOccupancy(Square sq) noexcept {
