@@ -1,4 +1,6 @@
-# 4PC Teams knight evaluation: revised after failed strength test
+<a id="4pc-teams-knight-evaluation-revised-after-failed-strength-test"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/crown.svg" alt="" width="20" height="20"> 4PC Teams knight evaluation: revised after failed strength test
 
 The combined first version of knight check-threat, moving from the back
 rank, enemy-piece proximity, and enemy-king proximity reportedly scored
@@ -6,7 +8,9 @@ rank, enemy-piece proximity, and enemy-king proximity reportedly scored
 unchanged. These four knobs now default to **0** and remain accessible
 only for independent, opt-in experiments.
 
-## Revised default: small, tactical-context outpost (+6 cp)
+<a id="revised-default-small-tactical-context-outpost-6-cp"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/shield-check.svg" alt="" width="20" height="20"> Revised default: small, tactical-context outpost (+6 cp)
 
 A surviving knight qualifies only when ALL of the following hold:
 
@@ -46,7 +50,9 @@ setoption name EvalKnightKingApproachBonus value 0
 `ResetTuning` restores these defaults. To fully match the old HCE
 without new knight heuristics, also set `EvalKnightOutpostBonus` to 0.
 
-## Validation / next strength test
+<a id="validation--next-strength-test"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> Validation / next strength test
 
 Build both engines in identical x64 Release mode with the same
 NNUE configuration, hash, threads, and four-player opening suite.

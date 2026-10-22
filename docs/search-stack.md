@@ -1,4 +1,6 @@
-# Per-ply search stack
+<a id="per-ply-search-stack"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/layers.svg" alt="" width="20" height="20"> Per-ply search stack
 
 `SearchEngine::searchStack_` now stores `SearchStackEntry`, defined in
 `include/ironphoenix/search_stack.hpp`, instead of only `HistoryContext`.

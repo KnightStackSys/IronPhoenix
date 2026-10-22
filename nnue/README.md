@@ -1,8 +1,12 @@
-# 🧠 PhoenixNet NNUE v1
+<a id="-phoenixnet-nnue-v1"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/brain.svg" alt="" width="20" height="20"> PhoenixNet NNUE v1
 
 PhoenixNet is IronPhoenix's first neural evaluator for four-player Teams chess.
 
-## 🏗️ Architecture
+<a id="-architecture"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/construction.svg" alt="" width="20" height="20"> Architecture
 
 - 160 playable squares on the 14x14 cross board
 - 4 relative colors: self, next enemy, partner, previous enemy
@@ -18,7 +22,9 @@ PhoenixNet is IronPhoenix's first neural evaluator for four-player Teams chess.
 
 The engine score is always side-to-move-team relative. Positive values favor the team of the player whose turn it is.
 
-## 🧩 Feature Index
+<a id="-feature-index"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/puzzle.svg" alt="" width="20" height="20"> Feature Index
 
 Each sparse feature is:
 
@@ -28,7 +34,9 @@ king bucket × relative piece color × piece type × canonical piece square
 
 Positions are rotated into the current player's orientation before indexing. Red is canonical, Blue rotates 90 degrees, Yellow 180 degrees, and Green 270 degrees.
 
-## ⚙️ Runtime Behavior
+<a id="-runtime-behavior"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/settings.svg" alt="" width="20" height="20"> Runtime Behavior
 
 IronPhoenix tries to load `ironphoenix.nnue` from its working directory at startup.
 
@@ -40,7 +48,9 @@ IRONPHOENIX_NNUE=/path/to/network.nnue
 
 If no valid network is found, the engine automatically falls back to the existing handcrafted material + mobility evaluator.
 
-# 🔀 MultiPV
+<a id="-multipv"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/shuffle.svg" alt="" width="20" height="20"> MultiPV
 
 IronPhoenix exposes a UCI `MultiPV` option:
 
@@ -59,13 +69,17 @@ info depth 8 seldepth 18 multipv 4 score cp 12 ... pv ...
 
 The first line is the best move and is still returned as `bestmove`.
 
-# 🧪 Dataset Generation
+<a id="-dataset-generation"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> Dataset Generation
 
 The CMake build produces `ironphoenix_dataset` when `IRONPHOENIX_BUILD_DATASET_GENERATOR=ON`.
 
 The generator uses HCE-backed search as the teacher, writes exact C++ `NNUE::featureIndex()` sparse features, supports deduplication, controlled exploration, append/resume, and graceful Ctrl+C stopping.
 
-### 🧫 Quick smoke dataset
+<a id="-quick-smoke-dataset"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> Quick smoke dataset
 
 ```powershell
 .\build\Release\ironphoenix_dataset.exe `
@@ -76,7 +90,9 @@ The generator uses HCE-backed search as the teacher, writes exact C++ `NNUE::fea
     --output nnue\phoenix-smoke.ipd
 ```
 
-### 🚀 Larger first training set
+<a id="-larger-first-training-set"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/rocket.svg" alt="" width="20" height="20"> Larger first training set
 
 ```powershell
 .\build\Release\ironphoenix_dataset.exe `
@@ -96,7 +112,9 @@ The generator uses HCE-backed search as the teacher, writes exact C++ `NNUE::fea
 
 On a 16-core / 24-thread CPU, start around 8-12 generator workers. Each worker owns its own search engine and transposition table. `--hash` is per worker, so 12 workers with `--hash 16` use roughly 192 MB just for transposition tables.
 
-## ⚡ Faster Exploration Scheduling
+<a id="-faster-exploration-scheduling"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/zap.svg" alt="" width="20" height="20"> Faster Exploration Scheduling
 
 Exploration no longer forces every teacher search through MultiPV.
 
@@ -113,7 +131,9 @@ This preserves diversity while avoiding the old behavior where MultiPV was paid 
 
 Set `--exploration 0` for pure single-PV generation.
 
-## 🎲 Opening Diversity and Deduplication
+<a id="-opening-diversity-and-deduplication"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/dices.svg" alt="" width="20" height="20"> Opening Diversity and Deduplication
 
 The starting position is never sampled. The default opening phase uses 8 random non-terminal plies and sampling starts no earlier than ply 12.
 
@@ -121,7 +141,9 @@ Deduplication is enabled by default. The generator fingerprints the exact Phoeni
 
 Append/resume preloads fingerprints from the existing dataset so deduplication works across runs.
 
-## 🛑 Graceful Stop and Resume
+<a id="-graceful-stop-and-resume"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/circle-stop.svg" alt="" width="20" height="20"> Graceful Stop and Resume
 
 Press `Ctrl+C` once to stop safely. Active searches are stopped, worker threads exit, record bytes are flushed, and the authoritative record count is committed before the process returns.
 
@@ -143,11 +165,13 @@ If 50,000 positions already exist, `--resume --positions 500000` generates the r
 
 `--append --positions 500000` has different semantics: it adds another 500,000 positions.
 
-📊 Progress is printed every 10 saved positions.
+<img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/chart-column.svg" alt="" width="20" height="20"> Progress is printed every 10 saved positions.
 
 Older abruptly interrupted files with stale header counts are scanned for complete trailing records. Complete records are recovered; only an incomplete final record is discarded.
 
-## 🛠️ Useful Generator Options
+<a id="-useful-generator-options"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/wrench.svg" alt="" width="20" height="20"> Useful Generator Options
 
 ```text
 --positions N              number of samples (or total target with --resume)
@@ -171,7 +195,9 @@ Older abruptly interrupted files with stale header counts are scanned for comple
 --seed N                   deterministic RNG seed
 ```
 
-## 💾 Native IPD Dataset Format
+<a id="-native-ipd-dataset-format"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/database.svg" alt="" width="20" height="20"> Native IPD Dataset Format
 
 `ironphoenix_dataset` writes a compact little-endian `IPDATA1` stream. Each record contains:
 
@@ -188,7 +214,9 @@ Feature indices are stored as `uint16` because PhoenixNet v1 has 65,280 features
 
 `train.py` reads `.ipd` directly and uses game IDs to keep entire self-play games on one side of the train/validation split.
 
-# 🏋️ Training
+<a id="-training"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/dumbbell.svg" alt="" width="20" height="20"> Training
 
 Install Python dependencies:
 
@@ -199,7 +227,9 @@ python -m pip install --upgrade pip
 pip install torch numpy
 ```
 
-### 🧪 Train a smoke network
+<a id="-train-a-smoke-network"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> Train a smoke network
 
 ```powershell
 python nnue\train.py nnue\phoenix-smoke.ipd `
@@ -208,7 +238,9 @@ python nnue\train.py nnue\phoenix-smoke.ipd `
     -o nnue\phoenix-smoke.pt
 ```
 
-### 🔥 Train the larger network
+<a id="-train-the-larger-network"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flame.svg" alt="" width="20" height="20"> Train the larger network
 
 ```powershell
 python nnue\train.py nnue\phoenix-v1.ipd `
@@ -220,7 +252,9 @@ python nnue\train.py nnue\phoenix-v1.ipd `
 
 If CUDA is available, `train.py` selects it automatically. Use `--device cpu` or `--device cuda` to override.
 
-# 📦 Exporting the Network
+<a id="-exporting-the-network"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/package.svg" alt="" width="20" height="20"> Exporting the Network
 
 Export the best checkpoint to the format consumed by the engine:
 
@@ -240,7 +274,9 @@ PhoenixNet loaded: ironphoenix.nnue
 
 If the file is missing or incompatible, IronPhoenix prints the HCE fallback message and continues using material + mobility.
 
-## 🧱 NNUE Binary File Format
+<a id="-nnue-binary-file-format"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/blocks.svg" alt="" width="20" height="20"> NNUE Binary File Format
 
 All values are little-endian. PhoenixNet v1 currently stores float32 weights to keep training/export validation straightforward.
 
@@ -263,7 +299,9 @@ f32[32]          output_weights
 f32              output_bias
 ```
 
-## 🗺️ Development Stages
+<a id="-development-stages"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/map.svg" alt="" width="20" height="20"> Development Stages
 
 PhoenixNet v1 intentionally starts with full accumulator refreshes. This gives a correctness baseline before optimization.
 

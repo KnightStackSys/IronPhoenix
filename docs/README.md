@@ -1,8 +1,12 @@
-# IronPhoenix website
+<a id="ironphoenix-website"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/globe.svg" alt="" width="20" height="20"> IronPhoenix website
 
 GitHub Pages serves this folder directly. There is no compilation step, package manager, or generated output to publish. All runtime assets are local. `index.html` contains the content, `assets/site.css` contains the theme, and `assets/site.js` provides progressive enhancements (mobile navigation, command copying, and a decorative board). The engine itself does not run in the browser.
 
-## Preview
+<a id="preview"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/monitor.svg" alt="" width="20" height="20"> Preview
 
 From the repository root, with Python 3 installed:
 
@@ -12,7 +16,9 @@ python -m http.server 8080 --directory docs
 
 Open http://localhost:8080. Check desktop and mobile layouts, the navigation button and Escape key, command copying, and keyboard focus. Content, links, and navigation remain available with JavaScript disabled; the decorative board requires JavaScript. Clipboard buttons appear only in secure contexts where the Clipboard API exists.
 
-## Maintenance
+<a id="maintenance"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/wrench.svg" alt="" width="20" height="20"> Maintenance
 
 - Keep engine claims and commands aligned with the root README and `nnue/README.md`.
 - Bulma **1.0.4** is vendored from `https://cdn.jsdelivr.net/npm/bulma@1.0.4/css/bulma.min.css` in `assets/vendor/`. Its MIT license is included. To upgrade, replace the pinned CSS and license, update the link in `index.html`, and review both layouts.

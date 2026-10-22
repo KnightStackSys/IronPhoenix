@@ -1,4 +1,6 @@
-# Attacking-piece evaluation for IronPhoenix Teams HCE
+<a id="attacking-piece-evaluation-for-ironphoenix-teams-hce"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/swords.svg" alt="" width="20" height="20"> Attacking-piece evaluation for IronPhoenix Teams HCE
 
 This experiment adds a small **direct-pressure bonus against enemy pieces** to
 the existing handcrafted material and mobility evaluation.
