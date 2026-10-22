@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🖥️ IronPhoenix
+# ![CPU Chip](https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/cpu.svg) IronPhoenix
 
 **IronPhoenix** is a high-performance **4-player chess Teams engine** written in modern C++20.
 
