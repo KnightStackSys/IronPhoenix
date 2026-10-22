@@ -774,31 +774,33 @@ namespace ironphoenix {
                 recordStackEvaluation(ply, staticEval);
 
             if (staticEval >= beta) {
-                    StateInfo nullState;
-                    pos.makeNullMove(nullState);
-                    searchStack_[ply + 1].history = HistoryContext{};
-
-                    // Dynamic null-move reduction: reduce the depth more aggressively
-                    // at deeper nodes and for higher static evaluations.
-                    const int reduction = 4 + depth / 5 + std::min(3, (staticEval - beta) / tuning.nullMoveDivisor);
-                    const int nullScore = -negamax(
-                        pos,
-                        depth - reduction,
-                        -beta,
-                        -beta + 1,
-                        ply + 1,
-                        false,
-                        false
-                    );
-
-                    pos.undoNullMove(nullState);
-
-                    if (shouldStop())
-                        return 0;
-
-                    // Never manufacture a mate score from a synthetic pass.
-                    if (nullScore >= beta && nullScore < MATE_THRESHOLD)
-                        return nullScore;
+                StateInfo nullState;
+                pos.makeNullMove(nullState);
+                searchStack_[ply + 1].history = HistoryContext{};
+                
+                // Dynamic null-move reduction: reduce the depth more aggressively
+                // at deeper nodes and for higher static evaluations.
+                const int reduction = 4 + depth / 5 +
+                    std::min(3, (staticEval - beta) / tuning.nullMoveDivisor);
+                const int nullScore = -negamax(
+                    pos,
+                    depth - reduction,
+                    -beta,
+                    -beta + 1,
+                    ply + 1,
+                    false,
+                    false
+                );
+                
+				// Undo the null move before returning to restore the position state.
+                pos.undoNullMove(nullState);
+                
+                if (shouldStop())
+                    return 0;
+                
+                // Never manufacture a mate score from a synthetic pass.
+                if (nullScore >= beta && nullScore < MATE_THRESHOLD)
+                    return nullScore;
             }
         }
 

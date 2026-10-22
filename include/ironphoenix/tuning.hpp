@@ -19,30 +19,30 @@ namespace ironphoenix {
             int counterMoveBonus = 32'000;
             int checkMoveBonus = 10'000'000;
             int lmrMinDepth = 3;
-            int lmrFullMoves = 3;
-            int lmrBaseX100 = 75;
-            int lmrDivisorX100 = 275;
-            int lmpHistoryThreshold = 2000;
+            int lmrFullMoves = 4;
+            int lmrBaseX100 = 78;
+            int lmrDivisorX100 = 286;
+            int lmpHistoryThreshold = 1918;
             int hmpMaxDepth = 4;
-            int hmpMarginPerDepth = 1500;
+            int hmpMarginPerDepth = 1519;
             int nullMoveMinDepth = 2;
-            int nullMoveDivisor = 190;
+            int nullMoveDivisor = 192;
             int rfpMaxDepth = 6;
-            int rfpMarginPerDepth = 130;
-            int rfpMinMargin = 90;
-            int rfpMaxImprovingDiscount = 80;
+            int rfpMarginPerDepth = 141;
+            int rfpMinMargin = 88;
+            int rfpMaxImprovingDiscount = 78;
         };
 
         struct EvalParameters final {
-            int pawnValue = 100;
-            int knightValue = 300;
-            int bishopValue = 400;
-            int rookValue = 500;
-            int queenValue = 1000;
-            int knightMobility = 4;
+            int pawnValue = 114;
+            int knightValue = 307;
+            int bishopValue = 390;
+            int rookValue = 497;
+            int queenValue = 1011;
+            int knightMobility = 5;
             int bishopMobility = 4;
-            int rookMobility = 2;
-            int queenMobility = 1;
+            int rookMobility = 4;
+            int queenMobility = 5;
             // 100 = default pressure; 0 = disabled, for A/B tests.
             int attackingPiecesWeight = 100;
         };
