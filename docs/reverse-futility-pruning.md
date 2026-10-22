@@ -1,4 +1,6 @@
-# Reverse futility pruning in Teams search
+<a id="reverse-futility-pruning-in-teams-search"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scissors.svg" alt="" width="20" height="20"> Reverse futility pruning in Teams search
 
 At shallow non-PV nodes, RFP skips the subtree when the side-to-move team's
 static evaluation minus a safety margin is already at least beta. This can
@@ -48,7 +50,9 @@ The old experiment is PR #28 at branch tip
 `dcefe70131df6c83a69910e2edec39086e3efa7f`. Its RFP idea and initial constants
 are retained, while its unrelated merge history is excluded from this branch.
 
-## Search hot-path optimization (NPS experiment)
+<a id="search-hot-path-optimization-nps-experiment"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/gauge.svg" alt="" width="20" height="20"> Search hot-path optimization (NPS experiment)
 
 The `reverse-futility-pruning-teams` branch also defers expensive
 `givesCheck()` calls at non-PV nodes until a move would otherwise be

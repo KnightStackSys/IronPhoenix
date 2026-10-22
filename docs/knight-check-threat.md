@@ -1,4 +1,6 @@
-# One-knight-move-away check threat (Teams HCE)
+<a id="one-knight-move-away-check-threat-teams-hce"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/swords.svg" alt="" width="20" height="20"> One-knight-move-away check threat (Teams HCE)
 
 Experimental penalty on `eval/knight-check-threat`, based on current
 `main`. The objective is to slightly discourage allowing a hostile knight
@@ -16,7 +18,9 @@ It also does not assert that the attacker moves on the very next overall
 **ply**, because IronPhoenix rotates turns Red → Blue → Yellow → Green.
 Search resolves actual move ordering and whether the king can escape.
 
-## Score and performance
+<a id="score-and-performance"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/gauge.svg" alt="" width="20" height="20"> Score and performance
 
 - **5 cp per potentially threatened allied king when enabled** (Red+Yellow or Blue+Green)
 - **Maximum 10 cp per team**, even with many attacking knights
