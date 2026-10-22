@@ -1,8 +1,12 @@
-# 🔥 IronPhoenix
+<div align="center">
+
+# 🖥️ IronPhoenix
 
 **IronPhoenix** is a high-performance **4-player chess Teams engine** written in modern C++20.
 
 It is built around the chess.com-style 4PC cross board, team-aware search, fast move generation, handcrafted evaluation, and **PhoenixNet**, a purpose-built NNUE evaluator for four-player Teams chess.
+
+</div>
 
 ---
 
