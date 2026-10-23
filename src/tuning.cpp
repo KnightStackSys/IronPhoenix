@@ -55,7 +55,10 @@ namespace ironphoenix::Tuning {
                 || name == "SearchRFPMaxDepth"
                 || name == "SearchRFPMarginPerDepth"
                 || name == "SearchRFPMinMargin"
-                || name == "SearchRFPMaxImprovingDiscount";
+                || name == "SearchRFPMaxImprovingDiscount"
+                || name == "SearchFutilityMaxDepth"
+                || name == "SearchFutilityBaseMargin"
+                || name == "SearchFutilityMarginPerDepth";
         }
 
         bool isEvalParameter(std::string_view name) noexcept {
@@ -164,6 +167,12 @@ namespace ironphoenix::Tuning {
             p.rfpMinMargin = value;
         else if (name == "SearchRFPMaxImprovingDiscount" && inRange(value, 0, 5000))
             p.rfpMaxImprovingDiscount = value;
+        else if (name == "SearchFutilityMaxDepth" && inRange(value, 0, 16))
+            p.futilityMaxDepth = value;
+        else if (name == "SearchFutilityBaseMargin" && inRange(value, 0, 5000))
+            p.futilityBaseMargin = value;
+        else if (name == "SearchFutilityMarginPerDepth" && inRange(value, 0, 5000))
+            p.futilityMarginPerDepth = value;
         else
             changed = false;
 
@@ -293,6 +302,9 @@ namespace ironphoenix::Tuning {
             << "option name SearchRFPMarginPerDepth type spin default " << searchDefaults.rfpMarginPerDepth << " min 0 max 5000\n"
             << "option name SearchRFPMinMargin type spin default " << searchDefaults.rfpMinMargin << " min 0 max 5000\n"
             << "option name SearchRFPMaxImprovingDiscount type spin default " << searchDefaults.rfpMaxImprovingDiscount << " min 0 max 5000\n"
+            << "option name SearchFutilityMaxDepth type spin default " << searchDefaults.futilityMaxDepth << " min 0 max 16\n"
+            << "option name SearchFutilityBaseMargin type spin default " << searchDefaults.futilityBaseMargin << " min 0 max 5000\n"
+            << "option name SearchFutilityMarginPerDepth type spin default " << searchDefaults.futilityMarginPerDepth << " min 0 max 5000\n"
             << "option name EvalPawnValue type spin default " << defaults.pawnValue << " min 0 max 5000\n"
             << "option name EvalKnightValue type spin default " << defaults.knightValue << " min 0 max 5000\n"
             << "option name EvalBishopValue type spin default " << defaults.bishopValue << " min 0 max 5000\n"
@@ -341,7 +353,10 @@ namespace ironphoenix::Tuning {
             << " SearchRFPMaxDepth=" << s.rfpMaxDepth
             << " SearchRFPMarginPerDepth=" << s.rfpMarginPerDepth
             << " SearchRFPMinMargin=" << s.rfpMinMargin
-            << " SearchRFPMaxImprovingDiscount=" << s.rfpMaxImprovingDiscount << '\n';
+            << " SearchRFPMaxImprovingDiscount=" << s.rfpMaxImprovingDiscount
+            << " SearchFutilityMaxDepth=" << s.futilityMaxDepth
+            << " SearchFutilityBaseMargin=" << s.futilityBaseMargin
+            << " SearchFutilityMarginPerDepth=" << s.futilityMarginPerDepth << '\n';
 
         out << "info string EvalPawnValue=" << e.pawnValue
             << " EvalKnightValue=" << e.knightValue

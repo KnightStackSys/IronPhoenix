@@ -31,6 +31,10 @@ namespace ironphoenix {
             int rfpMarginPerDepth = 141;
             int rfpMinMargin = 93;
             int rfpMaxImprovingDiscount = 82;
+            // Move-loop futility pruning (0 max depth disables).
+            int futilityMaxDepth = 2;
+            int futilityBaseMargin = 100;
+            int futilityMarginPerDepth = 150;
         };
 
         struct EvalParameters final {

@@ -882,6 +882,21 @@ namespace ironphoenix {
             }
         }
 
+        // Forward futility pruning, evaluated once per node. Unlike RFP,
+        // this NEVER returns a static score: it only skips later quiet moves
+        // whose optimistic static estimate remains below alpha.
+        // Use the same 4PC king/partner safety checks as RFP/NMP.
+        int futilityEstimate = INF;
+        if (canStaticPrune && tuning.futilityMaxDepth > 0
+            && depth <= tuning.futilityMaxDepth) {
+            const int staticEval = ss.staticEvalValid ? ss.staticEval : evaluate(pos);
+            if (!ss.staticEvalValid)
+                recordStackEvaluation(ply, staticEval);
+            if (staticEval > -MATE_THRESHOLD && staticEval < MATE_THRESHOLD)
+                futilityEstimate = staticEval + tuning.futilityBaseMargin
+                    + depth * tuning.futilityMarginPerDepth;
+        }
+
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
 
@@ -965,9 +980,20 @@ namespace ironphoenix {
             const bool seeCandidate = canPruneMove && legalMoves > 0
                 && depth <= tuning.seePruneMaxDepth
                 && move.isCapture() && !move.isPromotion();
+            // No quiet move is pruned until at least one LEGAL move has been
+            // searched. In particular never drop the only legal escape or
+            // a tactical checking move, promotion, or king capture.
+            const bool futilityCandidate = canPruneMove && quiet
+                && legalMoves > 0 && futilityEstimate <= alpha;
 
-            const bool givesCheckMove = (lmpCandidate || hmpCandidate || seeCandidate)
+            const bool givesCheckMove = (lmpCandidate || hmpCandidate
+                || seeCandidate || futilityCandidate)
                 && !terminalKingCapture && pos.givesCheck(move);
+
+            // Forward futility pruning: skip late, non-checking quiet moves
+            // if even the optimistic static score cannot raise alpha.
+            if (futilityCandidate && !givesCheckMove)
+                continue;
 
             // Late Move Pruning (LMP): keep checking moves and all exclusions.
             if (lmpCandidate && !givesCheckMove)
