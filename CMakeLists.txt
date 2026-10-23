@@ -244,6 +244,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     add_test(NAME ironphoenix_check_order COMMAND ironphoenix_check_order)
     set_target_properties(ironphoenix_check_order PROPERTIES FOLDER "Tests")
 
+    add_executable(ironphoenix_eval_cache tests/eval_cache.cpp)
+    target_link_libraries(ironphoenix_eval_cache PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_eval_cache PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_eval_cache COMMAND ironphoenix_eval_cache)
+    set_target_properties(ironphoenix_eval_cache PROPERTIES FOLDER "Tests")
+
     add_executable(ironphoenix_king_features tests/king_features.cpp)
     target_link_libraries(ironphoenix_king_features PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_king_features PRIVATE cxx_std_20)
