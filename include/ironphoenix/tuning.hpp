@@ -40,6 +40,8 @@ namespace ironphoenix {
             // Geometrically skip redundant inCheck(mover) after safe moves.
             // 0 forces original full move-by-move legality verification.
             int fastKingLegality = 1;
+            // Exact union of pawn attack maps, cached per worker.
+            int pawnAttackCache = 1;
         };
 
         struct EvalParameters final {

@@ -58,7 +58,8 @@ namespace ironphoenix::Tuning {
                 || name == "SearchRFPMaxImprovingDiscount"
                 || name == "SearchFastCheckPrefilter"
                 || name == "SearchEvalCache"
-                || name == "SearchFastKingLegality";
+                || name == "SearchFastKingLegality"
+                || name == "SearchPawnAttackCache";
         }
 
         bool isEvalParameter(std::string_view name) noexcept {
@@ -182,6 +183,8 @@ namespace ironphoenix::Tuning {
             p.evalCacheEnabled = value;
         else if (name == "SearchFastKingLegality" && inRange(value, 0, 1))
             p.fastKingLegality = value;
+        else if (name == "SearchPawnAttackCache" && inRange(value, 0, 1))
+            p.pawnAttackCache = value;
         else
             changed = false;
 
@@ -332,6 +335,7 @@ namespace ironphoenix::Tuning {
             << "option name SearchFastCheckPrefilter type spin default " << searchDefaults.fastCheckPrefilter << " min 0 max 1\n"
             << "option name SearchEvalCache type spin default " << searchDefaults.evalCacheEnabled << " min 0 max 1\n"
             << "option name SearchFastKingLegality type spin default " << searchDefaults.fastKingLegality << " min 0 max 1\n"
+            << "option name SearchPawnAttackCache type spin default " << searchDefaults.pawnAttackCache << " min 0 max 1\n"
             << "option name EvalPawnValue type spin default " << defaults.pawnValue << " min 0 max 5000\n"
             << "option name EvalKnightValue type spin default " << defaults.knightValue << " min 0 max 5000\n"
             << "option name EvalBishopValue type spin default " << defaults.bishopValue << " min 0 max 5000\n"
@@ -392,7 +396,8 @@ namespace ironphoenix::Tuning {
             << " SearchRFPMaxImprovingDiscount=" << s.rfpMaxImprovingDiscount
             << " SearchFastCheckPrefilter=" << s.fastCheckPrefilter
             << " SearchEvalCache=" << s.evalCacheEnabled
-            << " SearchFastKingLegality=" << s.fastKingLegality << '\n';
+            << " SearchFastKingLegality=" << s.fastKingLegality
+            << " SearchPawnAttackCache=" << s.pawnAttackCache << '\n';
 
         out << "info string EvalPawnValue=" << e.pawnValue
             << " EvalKnightValue=" << e.knightValue

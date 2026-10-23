@@ -163,10 +163,16 @@ int main(int argc, char** argv) {
     Tuning::search() = originalSearch;
     const bool fastLegalityDone = measure("fast-king-legality");
 
+    Tuning::search().pawnAttackCache = 0;
+    const bool pawnCacheOffDone = measure("pawn-attack-cache-disabled");
+    Tuning::search() = originalSearch;
+    const bool pawnCacheOnDone = measure("pawn-attack-cache-enabled");
+
     // This is a diagnostic, not an NPS threshold test. CI runner CPU differs
     // from local hardware, and iteration counters may be below node budget.
     return (finished && pinsDone && pawnsDone && threatDone
         && noKingDone && originalOrderingDone
         && cacheDisabledDone && cacheEnabledDone
-        && fullLegalityDone && fastLegalityDone) ? 0 : 1;
+        && fullLegalityDone && fastLegalityDone
+        && pawnCacheOffDone && pawnCacheOnDone) ? 0 : 1;
 }
