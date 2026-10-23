@@ -13,6 +13,9 @@ using namespace ironphoenix;
 namespace ironphoenix {
 struct FutilityPruningTestAccess {
     static std::uint64_t nodes(SearchEngine& engine) { return engine.nodes_; }
+    static bool evaluatedAt(SearchEngine& engine, int ply) {
+        return engine.searchStack_[ply].staticEvalValid;
+    }
     static int search(SearchEngine& engine, Position& pos, int depth,
                       int alpha, int beta, int ply = 1, bool pv = false,
                       bool allowNull = true) {
@@ -54,12 +57,15 @@ Position quietPosition() {
 
 std::uint64_t count(Position pos, bool pruning, bool pv = false,
                     int depth = 2, int alpha = 8000, bool allowNull = true,
-                    int ply = 1) {
+                    int ply = 1, bool* parentStaticEvaluated = nullptr) {
     Tuning::search().futilityMaxDepth = pruning ? 2 : 0;
     auto engine = std::make_unique<SearchEngine>();
     engine->setHashSizeMB(1);
     FutilityPruningTestAccess::search(*engine, pos, depth, alpha, alpha + 1,
                                      ply, pv, allowNull);
+    if (parentStaticEvaluated)
+        *parentStaticEvaluated =
+            FutilityPruningTestAccess::evaluatedAt(*engine, ply);
     return FutilityPruningTestAccess::nodes(*engine);
 }
 
@@ -135,16 +141,19 @@ void testSearch() {
     const auto rootPruned = count(pos, true, false, 1, 8000, true, 0);
     expect(rootBase == rootPruned, "root excluded from futility");
 
-    const auto depthBase = count(pos, false, false, 3);
-    const auto depthPruned = count(pos, true, false, 3);
-    expect(depthBase == depthPruned, "max-depth bound respected");
+    // Child nodes at depth 2 may still prune below a depth-3 parent.
+    // Verify the parent itself does not compute an FP static estimate.
+    bool parentEvaluated = true;
+    (void)count(pos, true, false, 3, 8000, true, 1, &parentEvaluated);
+    expect(!parentEvaluated, "depth-3 node skips futility static estimate");
 
     const auto nullBase = count(pos, false, false, 2, 8000, false);
     const auto nullPruned = count(pos, true, false, 2, 8000, false);
     expect(nullBase == nullPruned, "null subtree excluded");
 
     auto partnerChecked = quietPosition();
-    partnerChecked.placePiece(sq('g', 12), makePiece(GREEN, ROOK));
+    // Rook attacks YELLOW across rank 14 but cannot attack RED on g1.
+    partnerChecked.placePiece(sq('e', 14), makePiece(GREEN, ROOK));
     partnerChecked.finalizeSetup();
     expect(!partnerChecked.inCheck(RED) && partnerChecked.inCheck(YELLOW),
            "partner check setup valid");
