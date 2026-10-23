@@ -749,14 +749,38 @@ namespace ironphoenix {
         else
             generateTacticalMoves(pos, moves);
 
-        orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
+        // Non-PV, non-checking QSearch often terminates after a small
+        // tactical prefix. Score once, then find the best remaining move
+        // only when needed; avoid a full sort on early beta cutoffs.
+        // Keep full sorting for PVs/check evasions and short tactical lists.
+        const bool lazyTactical = !pvNode && !inCheckNode
+            && Tuning::search().qsearchLazyOrdering && moves.size >= 8;
+        std::array<int, MAX_MOVES> tacticalScores;
+        if (lazyTactical) {
+            for (std::size_t i = 0; i < moves.size; ++i)
+                tacticalScores[i] = moveScore(pos, moves.moves[i], ttMove,
+                                              ply, false);
+        } else {
+            orderMoves(pos, moves.begin(), moves.end(), ttMove, ply);
+        }
 
         const Color us = pos.sideToMove();
         int legalMoves = 0;
 
-        for (Move move : moves) {
+        for (std::size_t moveIndex = 0; moveIndex < moves.size; ++moveIndex) {
             if (shouldStop())
                 break;
+            if (lazyTactical) {
+                std::size_t best = moveIndex;
+                for (std::size_t j = moveIndex + 1; j < moves.size; ++j)
+                    if (tacticalScores[j] > tacticalScores[best])
+                        best = j;
+                if (best != moveIndex) {
+                    std::swap(moves.moves[moveIndex], moves.moves[best]);
+                    std::swap(tacticalScores[moveIndex], tacticalScores[best]);
+                }
+            }
+            const Move move = moves.moves[moveIndex];
             ss.currentMove = move;
 
             const bool terminalKingCapture = move.isCapture() && isTerminalKingCapture(pos, move);

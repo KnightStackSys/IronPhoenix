@@ -75,6 +75,7 @@ namespace ironphoenix {
         friend struct ReverseFutilityTestAccess;
         friend struct CheckOrderTestAccess;
         friend struct EvalCacheTestAccess;
+        friend struct QSearchOrderTestAccess;
         [[nodiscard]] bool reverseFutilitySafe(Position& pos) const;
 
         struct TimeBudget final {

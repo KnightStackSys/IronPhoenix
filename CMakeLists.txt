@@ -245,6 +245,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     add_test(NAME ironphoenix_check_order COMMAND ironphoenix_check_order)
     set_target_properties(ironphoenix_check_order PROPERTIES FOLDER "Tests")
 
+    add_executable(ironphoenix_qsearch_order tests/qsearch_order.cpp)
+    target_link_libraries(ironphoenix_qsearch_order PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_qsearch_order PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_qsearch_order COMMAND ironphoenix_qsearch_order)
+    set_target_properties(ironphoenix_qsearch_order PROPERTIES FOLDER "Tests")
+
     add_executable(ironphoenix_pawn_cache tests/pawn_cache.cpp)
     target_link_libraries(ironphoenix_pawn_cache PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_pawn_cache PRIVATE cxx_std_20)
