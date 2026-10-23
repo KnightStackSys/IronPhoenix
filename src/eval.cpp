@@ -13,45 +13,20 @@ namespace ironphoenix::Eval {
 
     namespace {
 
-        IRONPHOENIX_FORCE_INLINE int evalValue(PieceType pt) noexcept {
-            const auto& params = Tuning::eval();
-
-            switch (pt) {
-            case PAWN:   return params.pawnValue;
-            case KNIGHT: return params.knightValue;
-            case BISHOP: return params.bishopValue;
-            case ROOK:   return params.rookValue;
-            case QUEEN:  return params.queenValue;
-            default:     return 0;
-            }
-        }
-
-        IRONPHOENIX_FORCE_INLINE int mobilityWeight(PieceType pt) noexcept {
-            const auto& params = Tuning::eval();
-
-            switch (pt) {
-            case KNIGHT: return params.knightMobility;
-            case BISHOP: return params.bishopMobility;
-            case ROOK:   return params.rookMobility;
-            case QUEEN:  return params.queenMobility;
-            default:     return 0;
-            }
-        }
-
         IRONPHOENIX_FORCE_INLINE Bitboard teamOccupancy(const Position& pos, Color c) noexcept {
             const Color partner = static_cast<Color>(static_cast<unsigned>(c) ^ 2u);
             return pos.occupancy(c) | pos.occupancy(partner);
         }
 
-        int materialForColor(const Position& pos, Color c) noexcept {
-            int material = 0;
-
-            for (unsigned pt = PAWN; pt <= QUEEN; ++pt) {
-                material += pos.pieces(c, static_cast<PieceType>(pt)).popcount()
-                    * evalValue(static_cast<PieceType>(pt));
-            }
-
-            return material;
+        // Material is a fixed five-entry dot product: no per-piece-type
+        // switch or repeated tuning access at every leaf.
+        int materialForColor(const Position& pos, Color c,
+                             const Tuning::EvalParameters& tune) noexcept {
+            return pos.pieces(c, PAWN).popcount() * tune.pawnValue
+                + pos.pieces(c, KNIGHT).popcount() * tune.knightValue
+                + pos.pieces(c, BISHOP).popcount() * tune.bishopValue
+                + pos.pieces(c, ROOK).popcount() * tune.rookValue
+                + pos.pieces(c, QUEEN).popcount() * tune.queenValue;
         }
 
         // A conservative, pawn-backed knight foothold on an enemy flank.
@@ -116,16 +91,16 @@ namespace ironphoenix::Eval {
 
         int mobilityForColor(const Position& pos, Color c,
                              Bitboard& teamAttacks, unsigned& teamOutposts,
-                             Bitboard* teamBishopAttacks) noexcept {
+                             Bitboard* teamBishopAttacks,
+                             const Tuning::EvalParameters& tune) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
-            const auto& tune = Tuning::eval();
             const bool scoreThreats = tune.attackingPiecesWeight != 0;
             const bool scoreBishopWeakness = tune.bishopColorWeaknessPenalty != 0
                 && pos.isAlive(c);
 
             int score = 0;
 
-            auto scorePieces = [&](PieceType pt) {
+            auto scorePieces = [&](PieceType pt, int mobilityWeight) {
                 Bitboard pieces = pos.pieces(c, pt);
 
                 while (pieces) {
@@ -156,10 +131,10 @@ namespace ironphoenix::Eval {
                         teamBishopAttacks[color] |= attacks;
                     }
                     const int mobility = (attacks & ~blockedByTeam).popcount();
-                    score += mobility * mobilityWeight(pt);
+                    score += mobility * mobilityWeight;
                     // No second knight scan. Cap at TWO scored outposts
                     // across Red+Yellow or Blue+Green, including promotions.
-                    if (pt == KNIGHT && Tuning::eval().knightOutpostBonus > 0
+                    if (pt == KNIGHT && tune.knightOutpostBonus > 0
                         && teamOutposts < 2 && usefulKnightOutpost(pos, c, sq))
                         ++teamOutposts;
                     if (scoreThreats)
@@ -167,10 +142,10 @@ namespace ironphoenix::Eval {
                 }
             };
 
-            scorePieces(KNIGHT);
-            scorePieces(BISHOP);
-            scorePieces(ROOK);
-            scorePieces(QUEEN);
+            scorePieces(KNIGHT, tune.knightMobility);
+            scorePieces(BISHOP, tune.bishopMobility);
+            scorePieces(ROOK, tune.rookMobility);
+            scorePieces(QUEEN, tune.queenMobility);
 
             // Pawns' capture directions are threats, not mobility.
             if (scoreThreats) {
@@ -334,15 +309,16 @@ namespace ironphoenix::Eval {
 
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
+            const auto& tune = Tuning::eval();
             Bitboard attacks[2]{};
             Bitboard bishopAttacks[2][2]{};
             unsigned knightOutposts[2]{};
 
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
-                const int score = materialForColor(pos, c)
+                const int score = materialForColor(pos, c, tune)
                     + mobilityForColor(pos, c, attacks[teamOf(c)],
-                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)])
+                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)], tune)
                     + knightDevelopmentForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
@@ -351,9 +327,9 @@ namespace ironphoenix::Eval {
             }
 
             team0 += attackingPiecesForTeam(pos, 0, attacks[0])
-                + int(knightOutposts[0]) * Tuning::eval().knightOutpostBonus;
+                + int(knightOutposts[0]) * tune.knightOutpostBonus;
             team1 += attackingPiecesForTeam(pos, 1, attacks[1])
-                + int(knightOutposts[1]) * Tuning::eval().knightOutpostBonus;
+                + int(knightOutposts[1]) * tune.knightOutpostBonus;
 
             // Each team pays for potential knight checks against either
             // surviving king. Team-relative scoring handles all four turns.
