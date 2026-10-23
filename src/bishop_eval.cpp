@@ -98,7 +98,7 @@ bool protectedByTeamPawn(const Position& pos, int team, Square target) noexcept 
 
 } // namespace
 
-int bishopFeatureDifference(const Position& pos) noexcept {
+int bishopFeatureDifference(const Position& pos, const Bitboard bishopAttacks[2][2]) noexcept {
     const auto& tune = Tuning::eval();
     if (tune.badBishopPenalty == 0 && tune.bishopPairBonus == 0
         && tune.bishopVsKnightBonus == 0 && tune.bishopColorWeaknessPenalty == 0
@@ -165,19 +165,8 @@ int bishopFeatureDifference(const Position& pos) noexcept {
     }
 
     if (tune.bishopColorWeaknessPenalty) {
-        // Both teams need the other team's sliding attack masks. Calculate
-        // each team's bishop attacks only once, then reuse them for both kings.
-        Bitboard bishopAttacks[2][2]{};
-        for (int team = 0; team < 2; ++team) {
-            if (!teamBishops[team])
-                continue;
-            Bitboard bishops = teamBishops[team];
-            while (bishops) {
-                const Square bishop = popLsb(bishops);
-                bishopAttacks[team][squareColor(bishop)] |= pos.bishopAttacks(bishop);
-            }
-        }
-
+        // The mobility pass has already computed and collected each living
+        // bishop's attacked squares by team and checkerboard color.
         for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
             const Color c = static_cast<Color>(ci);
             if (!pos.isAlive(c))
