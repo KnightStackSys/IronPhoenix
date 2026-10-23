@@ -40,6 +40,9 @@ void SearchEngine::startMultiPV(
     stopRequested_.store(false, std::memory_order_relaxed);
     ponderHitRequested_.store(false, std::memory_order_relaxed);
     searching_.store(true, std::memory_order_relaxed);
+    tt_.setConcurrent(threads_ > 1);
+    groupNodes_.store(0, std::memory_order_relaxed);
+    sharedNodes_ = threads_ > 1 ? &groupNodes_ : nullptr;
     tt_.newGeneration();
 
     worker_ = std::thread([
@@ -50,7 +53,7 @@ void SearchEngine::startMultiPV(
         &out]() mutable {
 
         limits_ = limits;
-        runMultiPV(std::move(position), multiPV, out);
+        runWithHelpers(std::move(position), multiPV, out);
         searching_.store(false, std::memory_order_relaxed);
     });
 }
@@ -65,8 +68,8 @@ void SearchEngine::emitMultiPVInfo(
 
     const std::int64_t ms = elapsedMs();
     const std::uint64_t nps = ms > 0
-        ? nodes_ * 1000ull / static_cast<std::uint64_t>(ms)
-        : nodes_ * 1000ull;
+        ? totalNodes() * 1000ull / static_cast<std::uint64_t>(ms)
+        : totalNodes() * 1000ull;
 
     std::ostringstream line;
     line << "info depth " << depth
@@ -83,9 +86,9 @@ void SearchEngine::emitMultiPVInfo(
         line << " score cp " << score;
     }
 
-    line << " nodes " << nodes_
+    line << " nodes " << totalNodes()
         << " nps " << nps
-        << " hashfull " << tt_.hashfull()
+        << " hashfull " << activeTT_->hashfull()
         << " time " << ms
         << " pv";
 
@@ -140,7 +143,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
     bool havePreviousIteration = false;
     int stableBestDepths = 0;
     std::vector<RootLine> lastComplete;
-    int depth = 1;
+    int depth = helperMode_ ? 1 + (helperIndex_ % 3) : 1;
 
     while (!shouldStop()) {
         if (requestedDepth > 0 && depth > requestedDepth)
@@ -284,7 +287,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
 
         if (requestedDepth > 0 && depth == requestedDepth)
             break;
-        if (limits_.nodes > 0 && nodes_ >= limits_.nodes)
+        if (limits_.nodes > 0 && totalNodes() >= limits_.nodes)
             break;
         if (iterationTimeExpired(stableBestDepths, bestMoveChanged, scoreDelta))
             break;

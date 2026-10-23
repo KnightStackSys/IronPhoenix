@@ -9,7 +9,11 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
+#include <ostream>
 #include <sstream>
+#include <streambuf>
+#include <vector>
 #include <string>
 #include <utility>
 
@@ -53,10 +57,19 @@ namespace ironphoenix {
 
     }
 
-    SearchEngine::SearchEngine() = default;
+    SearchEngine::SearchEngine(bool helper)
+        : tt_(helper ? 1u : 64u), helperMode_(helper) {}
 
     SearchEngine::~SearchEngine() {
         stopAndWait();
+    }
+
+    bool SearchEngine::setThreads(int threads) {
+        if (threads < 1 || threads > MAX_THREADS)
+            return false;
+        stopAndWait();
+        threads_ = threads;
+        return true;
     }
 
     bool SearchEngine::setHashSizeMB(std::size_t megabytes) {
@@ -80,13 +93,77 @@ namespace ironphoenix {
         stopRequested_.store(false, std::memory_order_relaxed);
         ponderHitRequested_.store(false, std::memory_order_relaxed);
         searching_.store(true, std::memory_order_relaxed);
+        if (!helperMode_) {
+            tt_.setConcurrent(threads_ > 1);
+            groupNodes_.store(0, std::memory_order_relaxed);
+            sharedNodes_ = threads_ > 1 ? &groupNodes_ : nullptr;
+        }
         tt_.newGeneration();
 
         worker_ = std::thread([this, position = std::move(position), limits, &out]() mutable {
             limits_ = limits;
-            run(std::move(position), out);
+            runWithHelpers(std::move(position), 1, out);
             searching_.store(false, std::memory_order_relaxed);
             });
+    }
+
+    namespace {
+        // Helpers must never emit info/bestmove onto the primary UCI stream.
+        class NullStreamBuffer final : public std::streambuf {
+        protected:
+            int_type overflow(int_type ch) override {
+                return traits_type::not_eof(ch);
+            }
+        };
+    }
+
+    void SearchEngine::runWithHelpers(Position position, int multiPV, std::ostream& out) {
+        struct Sink {
+            NullStreamBuffer buffer;
+            std::ostream stream{&buffer};
+        };
+        // Each helper writes only to its own discarded stream.
+        std::vector<std::unique_ptr<Sink>> sinks;
+        std::vector<std::unique_ptr<SearchEngine>> helpers;
+        if (!helperMode_ && threads_ > 1) {
+            sinks.reserve(static_cast<std::size_t>(threads_ - 1));
+            helpers.reserve(static_cast<std::size_t>(threads_ - 1));
+            for (int i = 1; i < threads_; ++i) {
+                auto sink = std::make_unique<Sink>();
+                auto helper = std::make_unique<SearchEngine>(true);
+                helper->activeTT_ = &tt_;
+                helper->groupStop_ = &stopRequested_;
+                helper->sharedNodes_ = &groupNodes_;
+                helper->helperIndex_ = i;
+                // Independent iterative deepening with staggered root depths
+                // creates natural Lazy SMP diversity; only main emits moves.
+                helper->start(position, limits_, sink->stream);
+                sinks.push_back(std::move(sink));
+                helpers.push_back(std::move(helper));
+            }
+        }
+
+        if (multiPV > 1)
+            runMultiPV(std::move(position), multiPV, out);
+        else
+            run(std::move(position), out);
+
+        // Stop and join every helper before releasing the shared table/stream.
+        for (auto& helper : helpers)
+            helper->stopAndWait();
+    }
+
+    void SearchEngine::countNode() noexcept {
+        ++nodes_;
+        // Keep atomic contention out of the hot loop by reporting in batches.
+        if (sharedNodes_ && (nodes_ & 255u) == 0)
+            sharedNodes_->fetch_add(256u, std::memory_order_relaxed);
+    }
+
+    std::uint64_t SearchEngine::totalNodes() const noexcept {
+        return sharedNodes_
+            ? sharedNodes_->load(std::memory_order_relaxed) + (nodes_ & 255u)
+            : nodes_;
     }
 
     void SearchEngine::stop() noexcept {
@@ -242,10 +319,11 @@ namespace ironphoenix {
     }
 
     bool SearchEngine::shouldStop() noexcept {
-        if (stopRequested_.load(std::memory_order_relaxed))
+        if (stopRequested_.load(std::memory_order_relaxed)
+            || (groupStop_ && groupStop_->load(std::memory_order_relaxed)))
             return true;
 
-        if (limits_.nodes > 0 && nodes_ >= limits_.nodes) {
+        if (limits_.nodes > 0 && totalNodes() >= limits_.nodes) {
             stopRequested_.store(true, std::memory_order_relaxed);
             return true;
         }
@@ -500,7 +578,7 @@ namespace ironphoenix {
         auto& ss = searchStack_[ply];
         ss.beginNode(pos.sideToMove(), 0, pvNode);
 
-        ++nodes_;
+        countNode();
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
 
@@ -518,7 +596,7 @@ namespace ironphoenix {
         ss.inCheck = inCheckNode;
 
         TTProbe ttProbe;
-        const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
+        const bool ttHit = activeTT_->probe(pos.key(), ply, ttProbe);
         ss.recordTT(ttProbe, ttHit);
         const Move ttMove = ss.ttMove;
 
@@ -539,7 +617,7 @@ namespace ironphoenix {
             recordStackEvaluation(ply, bestScore);
 
             if (bestScore >= beta) {
-                tt_.store(pos.key(), 0, bestScore, TTBound::Lower, Move{}, pvNode, ply);
+                activeTT_->store(pos.key(), 0, bestScore, TTBound::Lower, Move{}, pvNode, ply);
                 return bestScore;
             }
 
@@ -614,7 +692,7 @@ namespace ironphoenix {
                 pvLength_[ply] = std::max(ply + 1, pvLength_[ply + 1]);
 
                 if (alpha >= beta) {
-                    tt_.store(pos.key(), 0, bestScore, TTBound::Lower, bestMove, pvNode, ply);
+                    activeTT_->store(pos.key(), 0, bestScore, TTBound::Lower, bestMove, pvNode, ply);
                     return bestScore;
                 }
             }
@@ -625,7 +703,7 @@ namespace ironphoenix {
 
         if (inCheckNode && legalMoves == 0) {
             const int mateScore = -MATE_SCORE + ply;
-            tt_.store(pos.key(), 0, mateScore, TTBound::Exact, Move{}, pvNode, ply);
+            activeTT_->store(pos.key(), 0, mateScore, TTBound::Exact, Move{}, pvNode, ply);
             return mateScore;
         }
 
@@ -640,7 +718,7 @@ namespace ironphoenix {
         else if (bestScore >= beta)
             bound = TTBound::Lower;
 
-        tt_.store(pos.key(), 0, bestScore, bound, bestMove, pvNode, ply);
+        activeTT_->store(pos.key(), 0, bestScore, bound, bestMove, pvNode, ply);
         return bestScore;
     }
 
@@ -699,7 +777,7 @@ namespace ironphoenix {
         auto& ss = searchStack_[ply];
         ss.beginNode(pos.sideToMove(), depth, pvNode);
 
-        ++nodes_;
+        countNode();
         selDepth_ = std::max(selDepth_, ply);
         pvLength_[ply] = ply;
 
@@ -713,7 +791,7 @@ namespace ironphoenix {
 
         const int originalAlpha = alpha;
         TTProbe ttProbe;
-        const bool ttHit = tt_.probe(pos.key(), ply, ttProbe);
+        const bool ttHit = activeTT_->probe(pos.key(), ply, ttProbe);
         ss.recordTT(ttProbe, ttHit);
         const Move ttMove = ss.ttMove;
 
@@ -1022,7 +1100,7 @@ namespace ironphoenix {
         else if (bestScore >= beta)
             bound = TTBound::Lower;
 
-        tt_.store(pos.key(), depth, bestScore, bound, bestMove, pvNode, ply);
+        activeTT_->store(pos.key(), depth, bestScore, bound, bestMove, pvNode, ply);
         return bestScore;
     }
 
@@ -1038,8 +1116,8 @@ namespace ironphoenix {
 
         const std::uint64_t nps =
             ms > 0
-            ? nodes_ * 1000ull / static_cast<std::uint64_t>(ms)
-            : nodes_ * 1000ull;
+            ? totalNodes() * 1000ull / static_cast<std::uint64_t>(ms)
+            : totalNodes() * 1000ull;
 
         std::ostringstream line;
 
@@ -1064,9 +1142,9 @@ namespace ironphoenix {
         else if (bound == ScoreBound::Upper)
             line << " upperbound";
 
-        line << " nodes " << nodes_
+        line << " nodes " << totalNodes()
             << " nps " << nps
-            << " hashfull " << tt_.hashfull()
+            << " hashfull " << activeTT_->hashfull()
             << " time " << ms
             << " pv";
 
@@ -1125,7 +1203,7 @@ namespace ironphoenix {
 
         const auto& tuning = Tuning::search();
         const int requestedDepth = limits_.depth > 0 ? std::min(limits_.depth, MAX_PLY - 1) : 0;
-        int depth = 1;
+        int depth = helperMode_ ? 1 + (helperIndex_ % 3) : 1;
 
         while (!shouldStop()) {
             if (requestedDepth > 0 && depth > requestedDepth)
@@ -1289,7 +1367,7 @@ namespace ironphoenix {
 
             if (requestedDepth > 0 && depth == requestedDepth)
                 break;
-            if (limits_.nodes > 0 && nodes_ >= limits_.nodes)
+            if (limits_.nodes > 0 && totalNodes() >= limits_.nodes)
                 break;
             if (iterationTimeExpired(stableBestDepths, bestMoveChanged, scoreDelta))
                 break;
