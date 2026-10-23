@@ -51,6 +51,9 @@ jobs:
       - name: 🧪 Run tests
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: ⚡ Report search NPS (diagnostic only)
+        run: ${{ runner.os == 'Windows' && './build/Release/ironphoenix_nps_bench.exe' || './build/ironphoenix_nps_bench' }}
+
       - name: 🖥️ Web GUI integration against compiled engine
         env:
           IRONPHOENIX_NATIVE_ENGINE: ${{ matrix.binary }}

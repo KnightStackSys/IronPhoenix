@@ -36,3 +36,7 @@ Reference concepts: [Bad Bishop](https://chessprogramming.org/Bad_Bishop),
 The tuned bishop weights are nonzero by default and can make HCE leaf nodes more expensive. The evaluator collects both teams' bishop/pawn material **once**, and reuses enemy bishop attack maps rather than recalculating them for each team. Precomputed `Geometry::BishopBadPawnMask[color][square]` bitboards turn the former per-bishop, per-pawn coordinate scan into a three-word bitboard intersection and popcount. Unit tests check all 4 × 160 × 160 bishop/pawn mask combinations. Evaluation and search scores are intended to be identical to the original implementation.
 
 NPS depends on the CPU, build mode, position, Hash, thread count, NNUE state and evaluation weights; these are **throughput optimizations, not a promise of a fixed NPS**. Compare on the same Release build and position and validate engine strength independently.
+
+### Reproducible search throughput
+
+Build with `-DIRONPHOENIX_BUILD_BENCHMARK=ON`, then run `ironphoenix_nps_bench 1000000` from your Release build directory. The tool searches a fixed nonterminal 4PC Teams middlegame with the branch's currently tuned HCE weights, prints the last completed search iteration's nodes/NPS, and uses a fixed node target. Compare the same executable configuration, CPU, hash and node target before/after. CI prints this diagnostic without enforcing a machine-specific NPS threshold.
