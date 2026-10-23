@@ -5,26 +5,13 @@
 #include "ironphoenix/tuning.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 
 namespace ironphoenix::Eval {
 namespace {
 
-constexpr int PHASE_MAX = 24; // two opposing armies: Q=4, R=2, B/N=1
-
-int enemyPhase(const Position& pos, Color defender) noexcept {
-    int phase = 0;
-    for (unsigned i = 0; i < COLOR_NB; ++i) {
-        const auto foe = static_cast<Color>(i);
-        if (!pos.isAlive(foe) || !enemy(defender, foe))
-            continue;
-        phase += 4 * pos.pieces(foe, QUEEN).popcount()
-               + 2 * pos.pieces(foe, ROOK).popcount()
-               + pos.pieces(foe, BISHOP).popcount()
-               + pos.pieces(foe, KNIGHT).popcount();
-    }
-    return std::min(PHASE_MAX, phase);
-}
+constexpr int PHASE_MAX = 24; // Opponent pair: Q=4, R=2, B/N=1
 
 int homeDepth(Color c, Square sq) noexcept {
     switch (c) {
@@ -41,81 +28,93 @@ int lateral(Color c, Square sq) noexcept {
         ? Geometry::fileOf(sq) : Geometry::rankOf(sq);
 }
 
-int centralDistance(Square sq) noexcept {
-    const int f = Geometry::fileOf(sq), r = Geometry::rankOf(sq);
-    return std::min(std::abs(f - 6), std::abs(f - 7))
-         + std::min(std::abs(r - 6), std::abs(r - 7));
-}
-
 Square sideSquare(Color c, Square king, int offset) noexcept {
-    const int file = Geometry::fileOf(king), rank = Geometry::rankOf(king);
-    const int f = file + ((c == RED || c == YELLOW) ? offset : 0);
-    const int r = rank + ((c == BLUE || c == GREEN) ? offset : 0);
-    return Geometry::validXY(f, r) ? Geometry::square(f, r) : SQ_NONE;
+    const int f = Geometry::fileOf(king);
+    const int r = Geometry::rankOf(king);
+    const int x = f + ((c == RED || c == YELLOW) ? offset : 0);
+    const int y = r + ((c == BLUE || c == GREEN) ? offset : 0);
+    return Geometry::validXY(x, y) ? Geometry::square(x, y) : SQ_NONE;
 }
 
-bool friendlyPawn(const Position& pos, Color c, Square sq) noexcept {
-    const Piece p = pos.pieceAt(sq);
-    return p != NO_PIECE && typeOf(p) == PAWN && allied(c, colorOf(p));
-}
+// Geometry depends only on king square and seat. Build the tiny lookup once,
+// after Geometry::init(), rather than recomputing it for millions of evals.
+// The C++11 function-local static initialization is thread-safe for Lazy SMP.
+struct KingMasks {
+    Bitboard storm{};
+    std::array<std::array<Bitboard, 3>, COLOR_NB> shield{};
+    std::array<std::array<bool, 3>, COLOR_NB> shieldLane{};
+    std::array<std::uint8_t, COLOR_NB> home{};
+    std::array<std::uint8_t, COLOR_NB> lateral{};
+    std::uint8_t centralDistance = 0;
+};
 
-int shieldMissing(const Position& pos, Color c, Square king) noexcept {
-    if (homeDepth(c, king) > 4)
-        return 0; // A wandering king does not have a meaningful home shield.
-    int missing = 0;
-    for (int offset = -1; offset <= 1; ++offset) {
-        const Square start = sideSquare(c, king, offset);
-        if (start == SQ_NONE)
-            continue;
-        const Square first = Geometry::step(start, Geometry::pawnForward(c));
-        const Square second = first == SQ_NONE
-            ? SQ_NONE : Geometry::step(first, Geometry::pawnForward(c));
-        if ((first == SQ_NONE || !friendlyPawn(pos, c, first))
-            && (second == SQ_NONE || !friendlyPawn(pos, c, second)))
-            ++missing;
-    }
-    return missing;
-}
+struct Lookup {
+    std::array<KingMasks, SQUARE_NB> kings{};
+    std::array<std::array<Bitboard, 2>, COLOR_NB> wings{};
 
-int enemyPawnStorm(const Position& pos, Color c, Square king) noexcept {
-    if (homeDepth(c, king) > 4)
-        return 0;
-    int nearby = 0;
-    for (unsigned i = 0; i < COLOR_NB; ++i) {
-        const auto foe = static_cast<Color>(i);
-        if (!pos.isAlive(foe) || !enemy(c, foe))
-            continue;
-        Bitboard pawns = pos.pieces(foe, PAWN);
-        while (pawns) {
-            const Square pawn = popLsb(pawns);
-            const int dx = std::abs(int(Geometry::fileOf(pawn)) - int(Geometry::fileOf(king)));
-            const int dy = std::abs(int(Geometry::rankOf(pawn)) - int(Geometry::rankOf(king)));
-            if (std::max(dx, dy) <= 3)
-                ++nearby;
+    Lookup() noexcept {
+        for (unsigned i = 0; i < SQUARE_NB; ++i) {
+            const Square sq = static_cast<Square>(i);
+            const int f = Geometry::fileOf(sq), r = Geometry::rankOf(sq);
+            if (!Geometry::validXY(f, r))
+                continue;
+            auto& m = kings[i];
+            m.centralDistance = static_cast<std::uint8_t>(
+                std::min(std::abs(f - 6), std::abs(f - 7))
+                + std::min(std::abs(r - 6), std::abs(r - 7)));
+
+            for (int dx = -3; dx <= 3; ++dx) {
+                for (int dy = -3; dy <= 3; ++dy) {
+                    if (Geometry::validXY(f + dx, r + dy))
+                        m.storm.set(Geometry::square(f + dx, r + dy));
+                }
+            }
+
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const auto c = static_cast<Color>(ci);
+                m.home[ci] = static_cast<std::uint8_t>(homeDepth(c, sq));
+                m.lateral[ci] = static_cast<std::uint8_t>(lateral(c, sq));
+                if (m.home[ci] > 4)
+                    continue;
+                for (int lane = -1; lane <= 1; ++lane) {
+                    const Square start = sideSquare(c, sq, lane);
+                    if (start == SQ_NONE)
+                        continue;
+                    m.shieldLane[ci][lane + 1] = true;
+                    const Square first = Geometry::step(start, Geometry::pawnForward(c));
+                    if (first != SQ_NONE) {
+                        m.shield[ci][lane + 1].set(first);
+                        const Square second = Geometry::step(first, Geometry::pawnForward(c));
+                        if (second != SQ_NONE)
+                            m.shield[ci][lane + 1].set(second);
+                    }
+                }
+            }
+        }
+        for (unsigned sq = 0; sq < SQUARE_NB; ++sq) {
+            const int f = Geometry::fileOf(static_cast<Square>(sq));
+            const int r = Geometry::rankOf(static_cast<Square>(sq));
+            if (!Geometry::validXY(f, r))
+                continue;
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const int across = lateral(static_cast<Color>(ci), static_cast<Square>(sq));
+                if (across <= 4)
+                    wings[ci][0].set(static_cast<Square>(sq));
+                if (across >= 9)
+                    wings[ci][1].set(static_cast<Square>(sq));
+            }
         }
     }
-    return std::min(4, nearby);
-}
+};
 
-bool pawnOnKingWing(const Position& pos, Color c, Square king) noexcept {
-    const int across = lateral(c, king);
-    if (across > 4 && across < 9)
-        return true; // Not on a wing.
-    for (unsigned i = 0; i < COLOR_NB; ++i) {
-        const auto owner = static_cast<Color>(i);
-        if (!pos.isAlive(owner) || !allied(c, owner))
-            continue;
-        Bitboard pawns = pos.pieces(owner, PAWN);
-        while (pawns) {
-            const int lane = lateral(c, popLsb(pawns));
-            if (across <= 4 ? lane <= 4 : lane >= 9)
-                return true;
-        }
-    }
-    return false;
+const Lookup& geometryMasks() noexcept {
+    static const Lookup lookup{};
+    return lookup;
 }
 
 int castleRights(const Position& pos, Color c) noexcept {
+    if (pos.castlingRights() == 0)
+        return 0;
     int available = 0;
     for (unsigned lane = 0; lane < 2; ++lane) {
         const CastleLane& def = pos.castleDefinition(c, lane);
@@ -130,94 +129,165 @@ int castleRights(const Position& pos, Color c) noexcept {
     return available;
 }
 
-// Count absolute pins of friendly material to a king. For x-rays, count
-// friendly pieces shielding a friendly queen from an enemy slider.
-// No ray can cross a corner hole: Geometry::step returns SQ_NONE.
-int rayPressure(const Position& pos, Color c, Square target) noexcept {
+struct TeamData {
+    Bitboard pawns{};
+    Bitboard occupants{};
+    Bitboard orthogonalSliders{};
+    Bitboard diagonalSliders{};
+    int phase = 0;
+};
+
+struct FastContext {
+    TeamData teams[2]{};
+    Bitboard occupancy{};
+};
+
+FastContext makeContext(const Position& pos) noexcept {
+    FastContext ctx{};
+    ctx.occupancy = pos.occupancy();
+    for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+        const Color c = static_cast<Color>(ci);
+        if (!pos.isAlive(c))
+            continue;
+        auto& t = ctx.teams[teamOf(c)];
+        const Bitboard queens = pos.pieces(c, QUEEN);
+        const Bitboard rooks = pos.pieces(c, ROOK);
+        const Bitboard bishops = pos.pieces(c, BISHOP);
+        const Bitboard knights = pos.pieces(c, KNIGHT);
+        t.pawns |= pos.pieces(c, PAWN);
+        t.occupants |= pos.occupancy(c);
+        t.orthogonalSliders |= rooks | queens;
+        t.diagonalSliders |= bishops | queens;
+        t.phase += 4 * queens.popcount() + 2 * rooks.popcount()
+                 + bishops.popcount() + knights.popcount();
+    }
+    ctx.teams[0].phase = std::min(PHASE_MAX, ctx.teams[0].phase);
+    ctx.teams[1].phase = std::min(PHASE_MAX, ctx.teams[1].phase);
+    return ctx;
+}
+
+// A screened friendly piece in a slider attack ray is a true geometric
+// pin (to a king) or x-ray (to a queen). Current-occupancy rook/bishop
+// lookups identify the FIRST occupied square in all directions at once;
+// only candidate friendly screens then need a second ray lookup.
+int rayPressure(const Position& pos, Square target,
+                Bitboard friends, const TeamData& opponents,
+                Bitboard occupancy) noexcept {
     int count = 0;
-    for (unsigned d = NORTH; d <= SOUTH_WEST; ++d) {
-        const auto dir = static_cast<Direction>(d);
-        Square cur = Geometry::step(target, dir);
-        while (cur != SQ_NONE && pos.pieceAt(cur) == NO_PIECE)
-            cur = Geometry::step(cur, dir);
-        if (cur == SQ_NONE)
-            continue;
-        const Piece screen = pos.pieceAt(cur);
-        if (!allied(c, colorOf(screen)) || typeOf(screen) == KING)
-            continue;
-        cur = Geometry::step(cur, dir);
-        while (cur != SQ_NONE && pos.pieceAt(cur) == NO_PIECE)
-            cur = Geometry::step(cur, dir);
-        if (cur == SQ_NONE)
-            continue;
-        const Piece slider = pos.pieceAt(cur);
-        if (!enemy(c, colorOf(slider)))
-            continue;
-        const auto pt = typeOf(slider);
-        const bool orthogonal = d <= WEST;
-        if (pt == QUEEN || (orthogonal && pt == ROOK)
-            || (!orthogonal && pt == BISHOP))
-            ++count;
+    if (opponents.orthogonalSliders) {
+        Bitboard screens = pos.rookAttacks(target) & friends;
+        while (screens) {
+            const Square screen = popLsb(screens);
+            if (typeOf(pos.pieceAt(screen)) == KING)
+                continue;
+            const int f = Geometry::fileOf(screen) - int(Geometry::fileOf(target));
+            const int r = Geometry::rankOf(screen) - int(Geometry::rankOf(target));
+            const Direction dir = f ? (f > 0 ? EAST : WEST)
+                                    : (r > 0 ? NORTH : SOUTH);
+            if (Geometry::rayAttack(screen, dir, occupancy)
+                    & opponents.orthogonalSliders)
+                ++count;
+        }
+    }
+    if (opponents.diagonalSliders) {
+        Bitboard screens = pos.bishopAttacks(target) & friends;
+        while (screens) {
+            const Square screen = popLsb(screens);
+            if (typeOf(pos.pieceAt(screen)) == KING)
+                continue;
+            const int f = Geometry::fileOf(screen) - int(Geometry::fileOf(target));
+            const int r = Geometry::rankOf(screen) - int(Geometry::rankOf(target));
+            const Direction dir = f > 0
+                ? (r > 0 ? NORTH_EAST : SOUTH_EAST)
+                : (r > 0 ? NORTH_WEST : SOUTH_WEST);
+            if (Geometry::rayAttack(screen, dir, occupancy)
+                    & opponents.diagonalSliders)
+                ++count;
+        }
     }
     return std::min(4, count);
 }
 
-int kingScore(const Position& pos, Color c, const Bitboard (&attacks)[2]) noexcept {
+int kingScore(const Position& pos, Color c,
+              const Bitboard (&attacks)[2], const FastContext& ctx,
+              const Lookup& lookup, const Tuning::EvalParameters& w) noexcept {
     if (!pos.isAlive(c))
         return 0;
     const Square king = pos.kingSquare(c);
     if (king == SQ_NONE)
         return 0;
 
-    const auto& w = Tuning::eval();
-    const int phase = enemyPhase(pos, c);
-    const int endPhase = PHASE_MAX - phase;
+    const unsigned ci = static_cast<unsigned>(c);
     const int team = teamOf(c);
+    const TeamData& own = ctx.teams[team];
+    const TeamData& foe = ctx.teams[team ^ 1];
+    const KingMasks& m = lookup.kings[king];
+    const int phase = foe.phase;
+    const int endPhase = PHASE_MAX - phase;
     int score = 0;
 
-    if (phase > 0) {
+    if (phase) {
         int danger = 0;
-        if (w.kingShieldPenalty)
-            danger += w.kingShieldPenalty * shieldMissing(pos, c, king);
-        if (w.kingPawnStormPenalty)
-            danger += w.kingPawnStormPenalty * enemyPawnStorm(pos, c, king);
+        if (m.home[ci] <= 4) {
+            if (w.kingShieldPenalty) {
+                int missing = 0;
+                for (int lane = 0; lane < 3; ++lane)
+                    missing += m.shieldLane[ci][lane]
+                        && !(m.shield[ci][lane] & own.pawns);
+                danger += w.kingShieldPenalty * missing;
+            }
+            if (w.kingPawnStormPenalty)
+                danger += w.kingPawnStormPenalty
+                    * std::min(4, (m.storm & foe.pawns).popcount());
+        }
 
-        const Bitboard zone = Geometry::KingAttacks[king];
         const Bitboard hostile = attacks[team ^ 1];
-        const int controlled = (zone & hostile).popcount();
+        const Bitboard zone = Geometry::KingAttacks[king];
         if (w.kingZoneAttackPenalty)
-            danger += w.kingZoneAttackPenalty * std::min(8, controlled);
+            danger += w.kingZoneAttackPenalty
+                * std::min(8, (zone & hostile).popcount());
 
-        // "Mate at a glance" is a king-danger pattern, NOT a forced mate
-        // or terminal score. Search decides whether king capture is legal.
+        // This is a heuristic danger pattern, not a mate conclusion.
         if (w.kingMateThreatPenalty && hostile.test(king)) {
-            const int escapes = (zone & ~pos.occupancy() & ~hostile).popcount();
+            const int escapes = (zone & ~ctx.occupancy & ~hostile).popcount();
             if (escapes <= 2)
                 danger += w.kingMateThreatPenalty * (3 - escapes);
         }
 
-        if (w.kingCastlingRightsBonus)
-            score += phase * w.kingCastlingRightsBonus * castleRights(pos, c) / PHASE_MAX;
+        if (w.kingCastlingRightsBonus && pos.castlingRights())
+            score += phase * w.kingCastlingRightsBonus
+                * castleRights(pos, c) / PHASE_MAX;
 
         if (w.kingPinPenalty)
-            danger += w.kingPinPenalty * rayPressure(pos, c, king);
+            danger += w.kingPinPenalty
+                * rayPressure(pos, king, own.occupants, foe, ctx.occupancy);
 
         score -= danger * phase / PHASE_MAX;
     }
 
-    if (endPhase > 0) {
+    if (endPhase) {
         if (w.kingCentralizationBonus)
             score += w.kingCentralizationBonus
-                * (12 - centralDistance(king)) * endPhase / PHASE_MAX;
-        if (w.kingPawnlessWingPenalty && !pawnOnKingWing(pos, c, king))
-            score -= w.kingPawnlessWingPenalty * endPhase / PHASE_MAX;
+                * (12 - int(m.centralDistance)) * endPhase / PHASE_MAX;
+
+        if (w.kingPawnlessWingPenalty) {
+            const int across = m.lateral[ci];
+            if (across <= 4) {
+                if (!(lookup.wings[ci][0] & own.pawns))
+                    score -= w.kingPawnlessWingPenalty * endPhase / PHASE_MAX;
+            } else if (across >= 9) {
+                if (!(lookup.wings[ci][1] & own.pawns))
+                    score -= w.kingPawnlessWingPenalty * endPhase / PHASE_MAX;
+            }
+        }
     }
 
-    if (w.kingXrayPenalty) {
+    if (w.kingXrayPenalty && (foe.orthogonalSliders || foe.diagonalSliders)) {
         Bitboard queens = pos.pieces(c, QUEEN);
         int rays = 0;
         while (queens)
-            rays += rayPressure(pos, c, popLsb(queens));
+            rays += rayPressure(pos, popLsb(queens), own.occupants,
+                                foe, ctx.occupancy);
         score -= w.kingXrayPenalty * std::min(4, rays);
     }
     return score;
@@ -235,12 +305,14 @@ int kingFeatureDifference(const Position& pos,
         || w.kingCastlingRightsBonus))
         return 0;
 
-    int teamScore[2]{};
+    const FastContext ctx = makeContext(pos);
+    const Lookup& lookup = geometryMasks();
+    int teams[2]{};
     for (unsigned i = 0; i < COLOR_NB; ++i) {
-        const auto c = static_cast<Color>(i);
-        teamScore[teamOf(c)] += kingScore(pos, c, teamAttacks);
+        const Color c = static_cast<Color>(i);
+        teams[teamOf(c)] += kingScore(pos, c, teamAttacks, ctx, lookup, w);
     }
-    return teamScore[0] - teamScore[1];
+    return teams[0] - teams[1];
 }
 
 } // namespace ironphoenix::Eval
