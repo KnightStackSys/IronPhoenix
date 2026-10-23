@@ -59,8 +59,7 @@ namespace ironphoenix::Tuning {
                 || name == "SearchFastCheckPrefilter"
                 || name == "SearchEvalCache"
                 || name == "SearchFastKingLegality"
-                || name == "SearchPawnAttackCache"
-                || name == "SearchQSearchLazyOrdering";
+                || name == "SearchPawnAttackCache";
         }
 
         bool isEvalParameter(std::string_view name) noexcept {
@@ -186,8 +185,6 @@ namespace ironphoenix::Tuning {
             p.fastKingLegality = value;
         else if (name == "SearchPawnAttackCache" && inRange(value, 0, 1))
             p.pawnAttackCache = value;
-        else if (name == "SearchQSearchLazyOrdering" && inRange(value, 0, 1))
-            p.qsearchLazyOrdering = value;
         else
             changed = false;
 
@@ -339,7 +336,6 @@ namespace ironphoenix::Tuning {
             << "option name SearchEvalCache type spin default " << searchDefaults.evalCacheEnabled << " min 0 max 1\n"
             << "option name SearchFastKingLegality type spin default " << searchDefaults.fastKingLegality << " min 0 max 1\n"
             << "option name SearchPawnAttackCache type spin default " << searchDefaults.pawnAttackCache << " min 0 max 1\n"
-            << "option name SearchQSearchLazyOrdering type spin default " << searchDefaults.qsearchLazyOrdering << " min 0 max 1\n"
             << "option name EvalPawnValue type spin default " << defaults.pawnValue << " min 0 max 5000\n"
             << "option name EvalKnightValue type spin default " << defaults.knightValue << " min 0 max 5000\n"
             << "option name EvalBishopValue type spin default " << defaults.bishopValue << " min 0 max 5000\n"
@@ -401,8 +397,7 @@ namespace ironphoenix::Tuning {
             << " SearchFastCheckPrefilter=" << s.fastCheckPrefilter
             << " SearchEvalCache=" << s.evalCacheEnabled
             << " SearchFastKingLegality=" << s.fastKingLegality
-            << " SearchPawnAttackCache=" << s.pawnAttackCache
-            << " SearchQSearchLazyOrdering=" << s.qsearchLazyOrdering << '\n';
+            << " SearchPawnAttackCache=" << s.pawnAttackCache << '\n';
 
         out << "info string EvalPawnValue=" << e.pawnValue
             << " EvalKnightValue=" << e.knightValue

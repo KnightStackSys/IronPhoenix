@@ -42,8 +42,6 @@ namespace ironphoenix {
             int fastKingLegality = 1;
             // Exact union of pawn attack maps, cached per worker.
             int pawnAttackCache = 1;
-            // Lazy pick tactical QSearch moves; 0 retains full sorting.
-            int qsearchLazyOrdering = 1;
         };
 
         struct EvalParameters final {

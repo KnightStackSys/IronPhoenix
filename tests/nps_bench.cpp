@@ -168,17 +168,11 @@ int main(int argc, char** argv) {
     Tuning::search() = originalSearch;
     const bool pawnCacheOnDone = measure("pawn-attack-cache-enabled");
 
-    Tuning::search().qsearchLazyOrdering = 0;
-    const bool qsearchFullDone = measure("qsearch-full-sort");
-    Tuning::search() = originalSearch;
-    const bool qsearchLazyDone = measure("qsearch-lazy-pick");
-
     // This is a diagnostic, not an NPS threshold test. CI runner CPU differs
     // from local hardware, and iteration counters may be below node budget.
     return (finished && pinsDone && pawnsDone && threatDone
         && noKingDone && originalOrderingDone
         && cacheDisabledDone && cacheEnabledDone
         && fullLegalityDone && fastLegalityDone
-        && pawnCacheOffDone && pawnCacheOnDone
-        && qsearchFullDone && qsearchLazyDone) ? 0 : 1;
+        && pawnCacheOffDone && pawnCacheOnDone) ? 0 : 1;
 }
