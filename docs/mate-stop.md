@@ -1,4 +1,6 @@
-# Stop iterative deepening on a winning mate
+<a id="stop-iterative-deepening-on-a-winning-mate"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/circle-stop.svg" alt="" width="20" height="20"> Stop iterative deepening on a winning mate
 
 After a **completed** root search iteration produces an exact winning mate
 score (between `MATE_THRESHOLD` and `MATE_SCORE`) and a valid best move,

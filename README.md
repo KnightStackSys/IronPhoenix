@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🖥️ IronPhoenix
+<a id="cpu-chip-ironphoenix"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/cpu.svg" alt="" width="20" height="20"> IronPhoenix
 
 **IronPhoenix** is a high-performance **4-player chess Teams engine** written in modern C++20.
 
@@ -10,7 +12,9 @@ It is built around the chess.com-style 4PC cross board, team-aware search, fast 
 
 ---
 
-## ♟️ What IronPhoenix Plays
+<a id="-what-ironphoenix-plays"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/crown.svg" alt="" width="20" height="20"> What IronPhoenix Plays
 
 IronPhoenix is designed for **4-player Teams chess**:
 
@@ -26,9 +30,13 @@ The engine evaluates positions from the **side-to-move team perspective**: posit
 
 ---
 
-## ⚡ Engine Features
+<a id="-engine-features"></a>
 
-### 🔎 Search
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/zap.svg" alt="" width="20" height="20"> Engine Features
+
+<a id="-search"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/search.svg" alt="" width="20" height="20"> Search
 
 IronPhoenix includes a modern alpha-beta search stack designed specifically for four-player Teams chess:
 
@@ -58,11 +66,15 @@ go depth 8
 
 ---
 
-## 🧮 Evaluation
+<a id="-evaluation"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/calculator.svg" alt="" width="20" height="20"> Evaluation
 
 IronPhoenix supports two evaluation paths.
 
-### 🛠️ Handcrafted Evaluation
+<a id="-handcrafted-evaluation"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/wrench.svg" alt="" width="20" height="20"> Handcrafted Evaluation
 
 The HCE currently provides the engine's deterministic fallback and PhoenixNet teacher foundation, including:
 
@@ -70,7 +82,9 @@ The HCE currently provides the engine's deterministic fallback and PhoenixNet te
 - Mobility
 - Team-relative scoring
 
-### 🧠 PhoenixNet NNUE
+<a id="-phoenixnet-nnue"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/brain.svg" alt="" width="20" height="20"> PhoenixNet NNUE
 
 **PhoenixNet** is IronPhoenix's native neural evaluator.
 
@@ -88,20 +102,26 @@ Current PhoenixNet v1 architecture:
 
 If `ironphoenix.nnue` is available beside the executable, IronPhoenix loads it automatically. Otherwise it falls back to HCE.
 
-For the full PhoenixNet architecture, dataset format, training flow, export format, append/resume support, and generator options, see **[🧠 PhoenixNet NNUE documentation](nnue/README.md)**.
+For the full PhoenixNet architecture, dataset format, training flow, export format, append/resume support, and generator options, see **[<img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/brain.svg" alt="" width="20" height="20"> PhoenixNet NNUE documentation](nnue/README.md)**.
 
 ---
 
-## 🏗️ Building IronPhoenix
+<a id="-building-ironphoenix"></a>
 
-### 📋 Requirements
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/construction.svg" alt="" width="20" height="20"> Building IronPhoenix
+
+<a id="-requirements"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/clipboard-list.svg" alt="" width="20" height="20"> Requirements
 
 - CMake **3.24+**
 - A C++20 compiler
 - Visual Studio / MSVC, Clang, or GCC
 - Threads support
 
-### 🪟 Windows / Visual Studio
+<a id="-windows--visual-studio"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/panels-top-left.svg" alt="" width="20" height="20"> Windows / Visual Studio
 
 From the project root:
 
@@ -131,7 +151,9 @@ cmake --build out\build\x64-release --target ironphoenix_dataset
 
 ---
 
-## 🖥️ Local web analysis GUI
+<a id="-local-web-analysis-gui"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/monitor.svg" alt="" width="20" height="20"> Local web analysis GUI
 
 Run IronPhoenix through a **localhost-only** web interface with a
 14×14 4-player Teams board, legal move input, engine PV arrows,
@@ -156,7 +178,9 @@ test instructions, read [`web/README.md`](web/README.md).
 
 ---
 
-## ▶️ Running the Engine
+<a id="-running-the-engine"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/play.svg" alt="" width="20" height="20"> Running the Engine
 
 Launch the engine executable and enter UCI-style commands:
 
@@ -185,7 +209,9 @@ setoption name Clear Hash
 
 ---
 
-## 🧪 PhoenixNet Dataset Generation
+<a id="-phoenixnet-dataset-generation"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> PhoenixNet Dataset Generation
 
 The project builds a native dataset generator:
 
@@ -195,7 +221,9 @@ ironphoenix_dataset
 
 It generates self-play positions using the engine search as a teacher and stores the exact sparse features consumed by PhoenixNet.
 
-### 🚀 Example dataset run
+<a id="-example-dataset-run"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/rocket.svg" alt="" width="20" height="20"> Example dataset run
 
 ```cmd
 ironphoenix_dataset.exe --positions 500000 --depth 8 --workers 8 --hash 16 --random-plies 8 --skip-plies 12 --sample-every 3 --exploration 0.15 --exploration-multipv 4 --exploration-temperature 120 --exploration-max-loss 250 --dedup --output "..\..\..\nnue\phoenix-v1.ipd"
@@ -215,7 +243,9 @@ The generator supports:
 - Recovery of complete records from older interrupted runs
 - Progress reporting every 10 saved positions
 
-### 🛑 Stop and resume safely
+<a id="-stop-and-resume-safely"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/circle-stop.svg" alt="" width="20" height="20"> Stop and resume safely
 
 Press **Ctrl+C once**. The generator stops active searches, joins its workers, flushes records, and commits the current dataset count.
 
@@ -229,7 +259,9 @@ If the file already contains 50,000 positions, this produces only the remaining 
 
 ---
 
-## 🏋️ Training PhoenixNet
+<a id="-training-phoenixnet"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/dumbbell.svg" alt="" width="20" height="20"> Training PhoenixNet
 
 Create a Python environment:
 
@@ -266,7 +298,9 @@ PhoenixNet loaded: ironphoenix.nnue
 
 ---
 
-## 📁 Project Layout
+<a id="-project-layout"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/folder.svg" alt="" width="20" height="20"> Project Layout
 
 ```text
 IronPhoenix/
@@ -281,7 +315,9 @@ IronPhoenix/
 
 ---
 
-## 🧭 Development Direction
+<a id="-development-direction"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/compass.svg" alt="" width="20" height="20"> Development Direction
 
 IronPhoenix is under active development. Current and planned work includes:
 
@@ -298,8 +334,10 @@ PhoenixNet v1 intentionally keeps a straightforward full-refresh inference path 
 
 ---
 
-## ❤️ Author
+<a id="-author"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/heart.svg" alt="" width="20" height="20"> Author
 
 **IronPhoenix** is developed by **Nick / KnightStackSys** as a dedicated high-performance engine for 4-player Teams chess.
 
-🔥 **Build. Search. Learn. Rise.**
+<img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flame.svg" alt="" width="20" height="20"> **Build. Search. Learn. Rise.**

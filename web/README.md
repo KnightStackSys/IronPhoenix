@@ -1,11 +1,15 @@
-# IronPhoenix localhost analysis studio
+<a id="ironphoenix-localhost-analysis-studio"></a>
+
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/monitor.svg" alt="" width="20" height="20"> IronPhoenix localhost analysis studio
 
 A **local-only**, dependency-free Node.js web GUI for IronPhoenix's
 four-player Teams engine. It displays the 14x14 cross board, lets you play
 legal moves, shows analysis PV arrows and MultiPV scores, and imports FEN4
 and long-algebraic PGN/PGN4 (including Chess.com-style files).
 
-## Quick start on Windows
+<a id="quick-start-on-windows"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/rocket.svg" alt="" width="20" height="20"> Quick start on Windows
 
 1. Build the IronPhoenix engine in x64 Release.
 2. Copy **`ironphoenix.exe` into this `web/` directory**, beside
@@ -26,7 +30,9 @@ make it executable with `chmod +x web/ironphoenix`, and run
 `node web/server.js`. The server binds **only to 127.0.0.1**, not your LAN
 or the public internet. No npm install, external CDNs, or cloud services.
 
-### Using the GUI
+<a id="using-the-gui"></a>
+
+### <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/mouse-pointer.svg" alt="" width="20" height="20"> Using the GUI
 
 - Select a piece and then a highlighted legal square to make a move.
 - Click **Analyze position** to show up to four MultiPV lines and arrows.
@@ -53,7 +59,9 @@ reimplement move rules, so promotions and captures stay consistent with
 the engine. Clicking a move after loading a game truncates the remaining
 moves if you play a different continuation.
 
-## Architecture and security
+<a id="architecture-and-security"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/shield-check.svg" alt="" width="20" height="20"> Architecture and security
 
 `server.js` launches one persistent UCI subprocess from **this web folder**,
 serves `index.html`, `style.css` and `app.js`, and exposes:
@@ -75,7 +83,9 @@ It is intended for one trusted local user, not remote deployment.
 Only one analysis session is active at a time; separate browser tabs share
 the same engine process. Closing the local Node server terminates the engine.
 
-## Tests
+<a id="tests"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> Tests
 
 From the repository root:
 
