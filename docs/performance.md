@@ -60,5 +60,18 @@ CI cloud runners have different CPU allocations, so absolute NPS between
 different workflow runs is not a valid speedup measurement. The benchmark's
 same-runner feature variants provide better relative evidence.
 
+Recent **single Linux CI runner** experimental comparisons (not user-machine
+NPS and not proven Elo gains):
+
+| Switch | Disabled | Enabled | Speedup |
+|---|---:|---:|---:|
+| `SearchEvalCache` | 598,037 | 612,344 | about 2.4% |
+| `SearchFastKingLegality` | 856,053 | 861,818 | about 0.7% |
+
+Benchmark runs use the same fixed 4PC fixture, node budget and worker count,
+but the repeated variant searches occur sequentially, so CPU variability and
+hash/iteration rounding still affect short measurements. Run longer tests
+locally, repeat trials, and rely on medians.
+
 This feature branch retains all new king-evaluation terms. NNUE still
 bypasses HCE; the HCE speed work helps only when NNUE is disabled.
