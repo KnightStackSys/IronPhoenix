@@ -172,10 +172,10 @@ FastContext makeContext(const Position& pos) noexcept {
 // only candidate friendly screens then need a second ray lookup.
 int rayPressure(const Position& pos, Square target,
                 Bitboard friends, const TeamData& opponents,
-                Bitboard occupancy) noexcept {
+                Bitboard occupancy, Bitboard sliderAttacks) noexcept {
     int count = 0;
     if (opponents.orthogonalSliders) {
-        Bitboard screens = pos.rookAttacks(target) & friends;
+        Bitboard screens = pos.rookAttacks(target) & friends & sliderAttacks;
         while (screens) {
             const Square screen = popLsb(screens);
             if (typeOf(pos.pieceAt(screen)) == KING)
@@ -190,7 +190,7 @@ int rayPressure(const Position& pos, Square target,
         }
     }
     if (opponents.diagonalSliders) {
-        Bitboard screens = pos.bishopAttacks(target) & friends;
+        Bitboard screens = pos.bishopAttacks(target) & friends & sliderAttacks;
         while (screens) {
             const Square screen = popLsb(screens);
             if (typeOf(pos.pieceAt(screen)) == KING)
@@ -209,7 +209,8 @@ int rayPressure(const Position& pos, Square target,
 }
 
 int kingScore(const Position& pos, Color c,
-              const Bitboard (&attacks)[2], const FastContext& ctx,
+              const Bitboard (&attacks)[2], const Bitboard (&sliderAttacks)[2],
+              const FastContext& ctx,
               const Lookup& lookup, const Tuning::EvalParameters& w) noexcept {
     if (!pos.isAlive(c))
         return 0;
@@ -258,9 +259,13 @@ int kingScore(const Position& pos, Color c,
             score += phase * w.kingCastlingRightsBonus
                 * castleRights(pos, c) / PHASE_MAX;
 
-        if (w.kingPinPenalty)
+        // Every absolute pin needs a friendly screen already attacked
+        // by an enemy slider. Use existing mobility attack maps to avoid
+        // unnecessary x-ray geometry in the common case.
+        if (w.kingPinPenalty && (sliderAttacks[team ^ 1] & own.occupants))
             danger += w.kingPinPenalty
-                * rayPressure(pos, king, own.occupants, foe, ctx.occupancy);
+                * rayPressure(pos, king, own.occupants, foe,
+                              ctx.occupancy, sliderAttacks[team ^ 1]);
 
         score -= danger * phase / PHASE_MAX;
     }
@@ -282,12 +287,13 @@ int kingScore(const Position& pos, Color c,
         }
     }
 
-    if (w.kingXrayPenalty && (foe.orthogonalSliders || foe.diagonalSliders)) {
+    if (w.kingXrayPenalty && (foe.orthogonalSliders || foe.diagonalSliders)
+        && (sliderAttacks[team ^ 1] & own.occupants)) {
         Bitboard queens = pos.pieces(c, QUEEN);
         int rays = 0;
         while (queens)
             rays += rayPressure(pos, popLsb(queens), own.occupants,
-                                foe, ctx.occupancy);
+                                foe, ctx.occupancy, sliderAttacks[team ^ 1]);
         score -= w.kingXrayPenalty * std::min(4, rays);
     }
     return score;
@@ -296,7 +302,8 @@ int kingScore(const Position& pos, Color c,
 } // namespace
 
 int kingFeatureDifference(const Position& pos,
-    const Bitboard (&teamAttacks)[2]) noexcept {
+    const Bitboard (&teamAttacks)[2],
+    const Bitboard (&sliderAttacks)[2]) noexcept {
     const auto& w = Tuning::eval();
     if (!(w.kingShieldPenalty || w.kingPawnStormPenalty
         || w.kingZoneAttackPenalty || w.kingMateThreatPenalty
@@ -310,7 +317,8 @@ int kingFeatureDifference(const Position& pos,
     int teams[2]{};
     for (unsigned i = 0; i < COLOR_NB; ++i) {
         const Color c = static_cast<Color>(i);
-        teams[teamOf(c)] += kingScore(pos, c, teamAttacks, ctx, lookup, w);
+        teams[teamOf(c)] += kingScore(pos, c, teamAttacks, sliderAttacks,
+                                      ctx, lookup, w);
     }
     return teams[0] - teams[1];
 }

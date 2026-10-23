@@ -117,7 +117,8 @@ namespace ironphoenix::Eval {
 
         int mobilityForColor(const Position& pos, Color c,
                              Bitboard& teamAttacks, unsigned& teamOutposts,
-                             Bitboard* teamBishopAttacks) noexcept {
+                             Bitboard* teamBishopAttacks,
+                             Bitboard& teamSliderAttacks) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
             const auto& tune = Tuning::eval();
             const bool scoreThreats = tune.attackingPiecesWeight != 0
@@ -167,6 +168,8 @@ namespace ironphoenix::Eval {
                         ++teamOutposts;
                     if (scoreThreats)
                         teamAttacks |= attacks;
+                    if (pt != KNIGHT)
+                        teamSliderAttacks |= attacks;
                 }
             };
 
@@ -338,6 +341,7 @@ namespace ironphoenix::Eval {
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
+            Bitboard sliderAttacks[2]{};
             Bitboard bishopAttacks[2][2]{};
             unsigned knightOutposts[2]{};
 
@@ -345,7 +349,8 @@ namespace ironphoenix::Eval {
                 const Color c = static_cast<Color>(ci);
                 const int score = materialForColor(pos, c)
                     + mobilityForColor(pos, c, attacks[teamOf(c)],
-                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)])
+                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)],
+                                       sliderAttacks[teamOf(c)])
                     + knightDevelopmentForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
@@ -367,7 +372,7 @@ namespace ironphoenix::Eval {
             // pawn/king structures. All new feature weights default to zero.
             const int score = team0 - team1
                 + bishopFeatureDifference(pos, bishopAttacks)
-                + kingFeatureDifference(pos, attacks);
+                + kingFeatureDifference(pos, attacks, sliderAttacks);
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 
