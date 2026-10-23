@@ -41,6 +41,7 @@ add_library(ironphoenix_core STATIC
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
     include/ironphoenix/tuning.hpp
+    include/ironphoenix/king_legality.hpp
 )
 
 add_library(IronPhoenix::Core ALIAS ironphoenix_core)
@@ -243,6 +244,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_check_order PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_check_order COMMAND ironphoenix_check_order)
     set_target_properties(ironphoenix_check_order PROPERTIES FOLDER "Tests")
+
+    add_executable(ironphoenix_king_legality tests/king_legality.cpp)
+    target_link_libraries(ironphoenix_king_legality PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_king_legality PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_king_legality COMMAND ironphoenix_king_legality)
+    set_target_properties(ironphoenix_king_legality PROPERTIES FOLDER "Tests")
 
     add_executable(ironphoenix_eval_cache tests/eval_cache.cpp)
     target_link_libraries(ironphoenix_eval_cache PRIVATE IronPhoenix::Core)

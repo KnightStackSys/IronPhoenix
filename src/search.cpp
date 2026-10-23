@@ -2,6 +2,7 @@
 
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/lmr.hpp"
+#include "ironphoenix/king_legality.hpp"
 #include "ironphoenix/tuning.hpp"
 
 #include "ironphoenix/movegen.hpp"
@@ -768,10 +769,17 @@ namespace ironphoenix {
                 pvLength_[ply + 1] = ply + 1;
             }
             else {
+                // A non-king move from a square outside every king ray
+                // cannot expose a new enemy attack on an already-safe king.
+                // King moves, EP, castling, checks and aligned sources keep
+                // full verification. All subsequent move/search logic is same.
+                const bool verifyKing = inCheckNode
+                    || !Tuning::search().fastKingLegality
+                    || kingCheckCanChange(pos, move);
                 StateInfo st;
                 pos.makeMove(move, st);
 
-                if (pos.inCheck(us)) {
+                if (verifyKing && pos.inCheck(us)) {
                     legal = false;
                 }
                 else {
@@ -1104,9 +1112,12 @@ namespace ironphoenix {
                 pvLength_[ply + 1] = ply + 1;
             }
             else {
+                const bool verifyKing = inCheckNode
+                    || !tuning.fastKingLegality
+                    || kingCheckCanChange(pos, move);
                 StateInfo st;
                 pos.makeMove(move, st);
-                if (pos.inCheck(us)) {
+                if (verifyKing && pos.inCheck(us)) {
                     legal = false;
                 }
                 else {

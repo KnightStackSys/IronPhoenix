@@ -37,6 +37,9 @@ namespace ironphoenix {
             // Exact full-evaluation cache, private to each search worker.
             // Set 0 to disable for NPS/SPRT comparisons.
             int evalCacheEnabled = 1;
+            // Geometrically skip redundant inCheck(mover) after safe moves.
+            // 0 forces original full move-by-move legality verification.
+            int fastKingLegality = 1;
         };
 
         struct EvalParameters final {
