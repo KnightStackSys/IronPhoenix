@@ -4,6 +4,11 @@
 #include "ironphoenix/tuning.hpp"
 
 #include <array>
+#include <chrono>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <utility>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -80,6 +85,37 @@ void compare(const Position& p, SearchEngine& engine) {
     }
 }
 
+std::pair<std::string,std::string> runFixedDepth(int fast) {
+    Tuning::search().fastCheckPrefilter=fast;
+    auto engine=std::make_unique<SearchEngine>();
+    SearchLimits limits{};
+    limits.depth=3;
+    std::ostringstream out;
+    engine->start(setup(), limits, out);
+    const auto start=std::chrono::steady_clock::now();
+    while (engine->searching() &&
+           std::chrono::steady_clock::now()-start < std::chrono::seconds(12))
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    require(!engine->searching(), "depth-3 search completed");
+    engine->stopAndWait();
+    const std::string result=out.str();
+    const std::size_t best=result.rfind("bestmove ");
+    require(best!=std::string::npos, "bestmove emitted");
+    const std::string finalMove=best==std::string::npos ? "" :
+        result.substr(best, result.find('\n',best)-best);
+
+    // Ignore elapsed time/NPS, which are nondeterministic across searches.
+    const std::size_t info=result.rfind("info depth 3 ");
+    require(info!=std::string::npos,"third-depth info emitted");
+    const std::size_t score=info==std::string::npos ? std::string::npos :
+        result.find(" score ",info);
+    const std::size_t nodes=score==std::string::npos ? score :
+        result.find(" nodes ",score);
+    const std::string finalScore=(score==std::string::npos || nodes==std::string::npos)
+        ? "" : result.substr(score,nodes-score);
+    return {finalMove,finalScore};
+}
+
 void test() {
     const auto defaults=Tuning::search();
     require(defaults.fastCheckPrefilter==1, "fast check default enabled");
@@ -117,6 +153,10 @@ void test() {
         p.makeMove(selected,state);
         require(p.verify(), "position valid after selected legal move");
     }
+    const auto originalSearch=runFixedDepth(0);
+    const auto optimizedSearch=runFixedDepth(1);
+    require(originalSearch==optimizedSearch,
+            "fast prefilter preserves depth-3 bestmove and score");
     Tuning::search()=defaults;
 }
 }

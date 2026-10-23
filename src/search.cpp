@@ -106,6 +106,21 @@ namespace ironphoenix {
             return false;
         }
 
+        IRONPHOENIX_FORCE_INLINE bool moverAlreadyChecksEnemy(
+            const Position& pos) noexcept {
+            const Color mover = pos.sideToMove();
+            const Bitboard occ = pos.occupancy();
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color foe = static_cast<Color>(ci);
+                if (!enemy(mover, foe) || !pos.isAlive(foe))
+                    continue;
+                const Square king = pos.kingSquare(foe);
+                if (king != SQ_NONE && pos.isAttackedBy(king, mover, occ))
+                    return true;
+            }
+            return false;
+        }
+
         IRONPHOENIX_FORCE_INLINE int captureOrderingScore(Piece movingPiece, Move move) noexcept {
             // Full four-player SEE is expensive enough that using it on every
             // generated capture purely for ordering costs substantial NPS.
@@ -540,18 +555,7 @@ namespace ironphoenix {
                     // per node so the fast prefilter is semantically exact.
                     if (!existingCheckKnown) {
                         existingCheckKnown = true;
-                        const Color mover = pos.sideToMove();
-                        const Bitboard occ = pos.occupancy();
-                        for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
-                            const Color foe = static_cast<Color>(ci);
-                            if (!enemy(mover, foe) || !pos.isAlive(foe))
-                                continue;
-                            const Square king = pos.kingSquare(foe);
-                            if (king != SQ_NONE && pos.isAttackedBy(king, mover, occ)) {
-                                existingCheck = true;
-                                break;
-                            }
-                        }
+                        existingCheck = moverAlreadyChecksEnemy(pos);
                     }
                     possible = existingCheck;
                 }
@@ -1001,6 +1005,11 @@ namespace ironphoenix {
         int bestScore = -INF;
         Move bestMove{};
 
+        // Both non-PV move-level HMP/LMP and SEE exclusions may need a
+        // check query. Cache pre-existing checks once for geometric fast paths.
+        bool existingCheckKnown = false;
+        bool existingCheck = false;
+
         // Quiet failures grow from the front and capture failures from the back,
         // replacing two 512-Move arrays with one without changing history updates.
         std::array<Move, MAX_MOVES> failedMoves;
@@ -1058,8 +1067,21 @@ namespace ironphoenix {
                 && depth <= tuning.seePruneMaxDepth
                 && move.isCapture() && !move.isPromotion();
 
-            const bool givesCheckMove = (lmpCandidate || hmpCandidate || seeCandidate)
-                && !terminalKingCapture && pos.givesCheck(move);
+            bool givesCheckMove = false;
+            if ((lmpCandidate || hmpCandidate || seeCandidate) && !terminalKingCapture) {
+                bool checkPossible = true;
+                if (quiet && !move.isCastle() && !move.isEnPassant()
+                    && Tuning::search().fastCheckPrefilter
+                    && !quietMayGiveCheck(pos, move)) {
+                    if (!existingCheckKnown) {
+                        existingCheckKnown = true;
+                        existingCheck = moverAlreadyChecksEnemy(pos);
+                    }
+                    checkPossible = existingCheck;
+                }
+                if (checkPossible)
+                    givesCheckMove = pos.givesCheck(move);
+            }
 
             // Late Move Pruning (LMP): keep checking moves and all exclusions.
             if (lmpCandidate && !givesCheckMove)
