@@ -183,6 +183,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_search_stack PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_search_stack COMMAND ironphoenix_search_stack)
 
+    add_executable(ironphoenix_lazy_smp tests/lazy_smp.cpp)
+    target_link_libraries(ironphoenix_lazy_smp PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_lazy_smp PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_lazy_smp COMMAND ironphoenix_lazy_smp)
+    set_target_properties(ironphoenix_lazy_smp PROPERTIES FOLDER "Tests")
+
     add_executable(ironphoenix_mate_stop tests/mate_stop.cpp)
     target_link_libraries(ironphoenix_mate_stop PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_mate_stop PRIVATE cxx_std_20)

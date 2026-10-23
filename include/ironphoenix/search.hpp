@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iosfwd>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -40,8 +41,9 @@ namespace ironphoenix {
     class SearchEngine {
     public:
         static constexpr int MAX_MULTI_PV = 32;
+        static constexpr int MAX_THREADS = 64;
 
-        SearchEngine();
+        explicit SearchEngine(bool helper = false);
         ~SearchEngine();
 
         SearchEngine(const SearchEngine&) = delete;
@@ -58,6 +60,9 @@ namespace ironphoenix {
         void ponderHit() noexcept;
 
         [[nodiscard]] bool searching() const noexcept { return searching_.load(std::memory_order_relaxed); }
+
+        bool setThreads(int threads);
+        [[nodiscard]] int threads() const noexcept { return threads_; }
 
         bool setHashSizeMB(std::size_t megabytes);
         [[nodiscard]] std::size_t hashSizeMB() const noexcept { return tt_.sizeMB(); }
@@ -82,7 +87,16 @@ namespace ironphoenix {
         static constexpr int MATE_THRESHOLD = 29000;
         static constexpr std::uint64_t TIME_CHECK_NODE_INTERVAL = 1024;
 
-        TranspositionTable tt_{ 64 };
+        TranspositionTable tt_;
+        // Helpers share only the primary's synchronized TT; all search state
+        // and history remain worker-local.
+        TranspositionTable* activeTT_ = &tt_;
+        std::atomic<std::uint64_t> groupNodes_{0};
+        std::atomic<std::uint64_t>* sharedNodes_ = nullptr;
+        const std::atomic<bool>* groupStop_ = nullptr;
+        bool helperMode_ = false;
+        int helperIndex_ = 0;
+        int threads_ = 1;
         HistoryTables history_{};
         std::thread worker_;
         std::atomic<bool> stopRequested_{ false };
@@ -105,7 +119,10 @@ namespace ironphoenix {
         std::array<SearchStackEntry, MAX_PLY> searchStack_{};
         mutable std::mutex outputMutex_;
 
+        void runWithHelpers(Position position, int multiPV, std::ostream& out);
         void run(Position position, std::ostream& out);
+        void countNode() noexcept;
+        [[nodiscard]] std::uint64_t totalNodes() const noexcept;
         void runMultiPV(Position position, int multiPV, std::ostream& out);
 
         int negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull = true);

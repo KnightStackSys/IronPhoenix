@@ -2,8 +2,10 @@
 
 #include "move.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 namespace ironphoenix {
@@ -33,6 +35,10 @@ public:
     bool resizeMB(std::size_t megabytes);
     void clear() noexcept;
     void newGeneration() noexcept;
+
+    // Enable striped cluster locks before launching any SMP worker.
+    // Never change this setting while a search is active.
+    void setConcurrent(bool enabled) noexcept { concurrent_ = enabled; }
 
     [[nodiscard]] bool probe(Key key, int ply, TTProbe& out) const noexcept;
     void store(Key key,
@@ -66,6 +72,12 @@ private:
     std::size_t mask_ = 0;
     std::size_t sizeMB_ = 0;
     std::uint8_t generation_ = 0;
+
+    // A 64-byte cluster is a coherent TT update unit. Striped locks prevent
+    // torn concurrent reads/writes without slowing down Threads=1 searches.
+    static constexpr std::size_t LOCK_STRIPES = 4096;
+    mutable std::array<std::mutex, LOCK_STRIPES> locks_{};
+    bool concurrent_ = false;
 
     [[nodiscard]] static int scoreToTT(int score, int ply) noexcept;
     [[nodiscard]] static int scoreFromTT(int score, int ply) noexcept;

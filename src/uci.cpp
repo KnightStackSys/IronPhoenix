@@ -255,6 +255,7 @@ namespace ironphoenix {
             "  setoption name Setup value <Modern|Classic|BY|BYG|RG|Custom>\n"
             "  setoption name StartFEN value <FEN4>\n"
             "  setoption name MultiPV value <1..32>\n"
+            "  setoption name Threads value <1..64>\n"
             "  setoption name Ponder value <true|false>\n"
             "  setoption name Move Overhead value <0..5000>\n"
             "  setoption name EvalFile value <path-to-.nnue>\n"
@@ -358,6 +359,20 @@ namespace ironphoenix {
                 return false;
             }
             out << "info string Hash set to " << search_.hashSizeMB() << " MB\n";
+            return true;
+        }
+
+        constexpr std::string_view threadsPrefix = "name Threads value ";
+        if (startsWith(args, threadsPrefix)) {
+            std::int64_t value = 0;
+            if (!parseNonNegative64(trim(args.substr(threadsPrefix.size())), value)
+                || value < 1 || value > SearchEngine::MAX_THREADS) {
+                out << "info string Threads must be between 1 and "
+                    << SearchEngine::MAX_THREADS << '\n';
+                return false;
+            }
+            search_.setThreads(static_cast<int>(value));
+            out << "info string Threads set to " << search_.threads() << '\n';
             return true;
         }
 
@@ -666,6 +681,7 @@ namespace ironphoenix {
                 << "option name Setup type combo default Modern var Modern var Classic var BY var BYG var RG var Custom\n"
                 << "option name StartFEN type string default <none>\n"
                 << "option name Hash type spin default 64 min 1 max 4096\n"
+                << "option name Threads type spin default 1 min 1 max " << SearchEngine::MAX_THREADS << "\n"
                 << "option name MultiPV type spin default 1 min 1 max " << SearchEngine::MAX_MULTI_PV << "\n"
                 << "option name Ponder type check default false\n"
                 << "option name Move Overhead type spin default 50 min 0 max 5000\n"
