@@ -87,13 +87,14 @@ bool looksLikeReturningBishop(const Position& pos, Color c, Square bishop) noexc
 }
 
 bool protectedByTeamPawn(const Position& pos, int team, Square target) noexcept {
-    for (unsigned i = 0; i < COLOR_NB; ++i) {
-        const Color c = static_cast<Color>(i);
-        if (teamOf(c) == team && pos.isAlive(c)
-            && (Geometry::PawnAttackers[c][target] & pos.pieces(c, PAWN)))
-            return true;
-    }
-    return false;
+    // 4PC teams are exactly Red+Yellow (0,2) and Blue+Green (1,3).
+    // Probe only the two allied pawn maps, not all four armies.
+    const Color a = static_cast<Color>(team);
+    const Color b = static_cast<Color>(team + 2);
+    return (pos.isAlive(a)
+                && (Geometry::PawnAttackers[a][target] & pos.pieces(a, PAWN)))
+        || (pos.isAlive(b)
+                && (Geometry::PawnAttackers[b][target] & pos.pieces(b, PAWN)));
 }
 
 } // namespace
@@ -164,26 +165,34 @@ int bishopFeatureDifference(const Position& pos, const Bitboard bishopAttacks[2]
         }
     }
 
-    if (tune.bishopColorWeaknessPenalty) {
-        // The mobility pass has already computed and collected each living
-        // bishop's attacked squares by team and checkerboard color.
+    if (tune.bishopColorWeaknessPenalty
+        && (bishopColors[0] != 3 || bishopColors[1] != 3)) {
+        // A full complementary bishop pair prevents color weakness entirely.
+        // In other positions only consider EMPTY squares the enemy bishops
+        // actually attack, rather than scanning every square around each king.
+        const Bitboard empty = ~pos.occupancy();
+        const Bitboard enemyTargets[2] = {
+            bishopAttacks[1][0] | bishopAttacks[1][1],
+            bishopAttacks[0][0] | bishopAttacks[0][1]
+        };
         for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
             const Color c = static_cast<Color>(ci);
             if (!pos.isAlive(c))
                 continue;
             const int team = teamOf(c);
+            if (bishopColors[team] == 3 || !enemyTargets[team])
+                continue;
             const Square king = pos.kingSquare(c);
             if (king == SQ_NONE)
                 continue;
 
             int weak = 0;
-            Bitboard nearby = Geometry::KingAttacks[king];
+            Bitboard nearby = Geometry::KingAttacks[king] & enemyTargets[team] & empty;
             while (nearby && weak < 2) {
                 const Square target = popLsb(nearby);
                 const int color = squareColor(target);
                 if ((bishopColors[team] & (1 << color))
                     || !bishopAttacks[team ^ 1][color].test(target)
-                    || pos.pieceAt(target) != NO_PIECE
                     || protectedByTeamPawn(pos, team, target))
                     continue;
                 ++weak;
