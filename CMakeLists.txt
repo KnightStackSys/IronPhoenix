@@ -194,6 +194,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_mate_stop PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_mate_stop COMMAND ironphoenix_mate_stop)
 
+    add_executable(ironphoenix_futility tests/futility.cpp)
+    target_link_libraries(ironphoenix_futility PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_futility PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_futility COMMAND ironphoenix_futility)
+    set_target_properties(ironphoenix_futility PROPERTIES FOLDER "Tests")
+
     add_executable(ironphoenix_reverse_futility tests/reverse_futility.cpp)
     target_link_libraries(ironphoenix_reverse_futility PRIVATE IronPhoenix::Core)
     add_test(NAME ironphoenix_reverse_futility COMMAND ironphoenix_reverse_futility)
