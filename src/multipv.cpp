@@ -109,6 +109,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
     hardTimeBudgetMs_ = timeBudget.hardMs;
     pondering_ = limits_.ponder;
     nodes_ = 0;
+    iirReductions_ = 0;
     nextTimeCheckNode_ = 0;
     selDepth_ = 0;
 
@@ -295,6 +296,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
             break;
     }
 
+    out << "info string iir reductions " << iirReductions_ << '\n';
     emitBestMove(out, bestMove, bestPonderMove);
 }
 

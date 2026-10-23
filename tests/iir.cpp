@@ -24,6 +24,47 @@ int main() {
     Geometry::init();
     Tuning::resetSearch();
     const Tuning::SearchParameters defaults{};
+
+    // The 21 non-IIR values are the latest SPSA-tuned defaults; the IIR
+    // controls preserve the user's requested PV-only experiment.
+    struct Expected { const char* name; int Tuning::SearchParameters::*field; int value; };
+    const Expected tuned[] = {
+        {"SearchAspirationStartDepth", &Tuning::SearchParameters::aspirationStartDepth, 2},
+        {"SearchAspirationDelta", &Tuning::SearchParameters::aspirationInitialDelta, 54},
+        {"SearchSEEPruneMaxDepth", &Tuning::SearchParameters::seePruneMaxDepth, 4},
+        {"SearchSEEPruneMargin", &Tuning::SearchParameters::seePruneMarginPerDepth, 87},
+        {"SearchHistoryBonusScale", &Tuning::SearchParameters::historyBonusScale, 63},
+        {"SearchHistoryBonusMax", &Tuning::SearchParameters::historyBonusMax, 2044},
+        {"SearchCounterMoveBonus", &Tuning::SearchParameters::counterMoveBonus, 31995},
+        {"SearchCheckMoveBonus", &Tuning::SearchParameters::checkMoveBonus, 9999994},
+        {"SearchLMRMinDepth", &Tuning::SearchParameters::lmrMinDepth, 1},
+        {"SearchLMRFullMoves", &Tuning::SearchParameters::lmrFullMoves, 6},
+        {"SearchLMRBaseX100", &Tuning::SearchParameters::lmrBaseX100, 79},
+        {"SearchLMRDivisorX100", &Tuning::SearchParameters::lmrDivisorX100, 300},
+        {"SearchLMPHistoryThreshold", &Tuning::SearchParameters::lmpHistoryThreshold, 1927},
+        {"SearchHMPMaxDepth", &Tuning::SearchParameters::hmpMaxDepth, 4},
+        {"SearchHMPMarginPerDepth", &Tuning::SearchParameters::hmpMarginPerDepth, 1522},
+        {"SearchNullMoveMinDepth", &Tuning::SearchParameters::nullMoveMinDepth, 3},
+        {"SearchNullMoveDivisor", &Tuning::SearchParameters::nullMoveDivisor, 194},
+        {"SearchRFPMaxDepth", &Tuning::SearchParameters::rfpMaxDepth, 6},
+        {"SearchRFPMarginPerDepth", &Tuning::SearchParameters::rfpMarginPerDepth, 141},
+        {"SearchRFPMinMargin", &Tuning::SearchParameters::rfpMinMargin, 93},
+        {"SearchRFPMaxImprovingDiscount", &Tuning::SearchParameters::rfpMaxImprovingDiscount, 82},
+        {"SearchIIRMinDepth", &Tuning::SearchParameters::iirMinDepth, 6},
+        {"SearchIIRReduction", &Tuning::SearchParameters::iirReduction, 1},
+        {"SearchIIRCutNode", &Tuning::SearchParameters::iirCutNode, 0},
+        {"SearchIIRAllNode", &Tuning::SearchParameters::iirAllNode, 0},
+    };
+    std::ostringstream defaultsUci;
+    Tuning::printUciOptions(defaultsUci);
+    for (const auto& row : tuned) {
+        expect(Tuning::search().*(row.field) == row.value,
+               "SPSA search default matches requested value");
+        expect(defaultsUci.str().find(std::string("option name ") + row.name
+                    + " type spin default " + std::to_string(row.value) + " min ")
+                   != std::string::npos,
+               "UCI advertises current SPSA default");
+    }
     expect(defaults.iirMinDepth == 6, "IIR default depth six");
     expect(defaults.iirReduction == 1, "IIR default reduction one");
     expect(defaults.iirCutNode == 0 && defaults.iirAllNode == 0,

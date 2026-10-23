@@ -816,8 +816,10 @@ namespace ironphoenix {
         const int iir = IIR::reduction(depth, ply, pvNode, cutNode,
             static_cast<bool>(ttMove), inCheckNode, tuning);
         if (iir > 0
-            && !pos.inCheck(static_cast<Color>(static_cast<unsigned>(us) ^ 2u)))
+            && !pos.inCheck(static_cast<Color>(static_cast<unsigned>(us) ^ 2u))) {
             depth -= iir;
+            ++iirReductions_;
+        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
@@ -1121,6 +1123,7 @@ namespace ironphoenix {
         hardTimeBudgetMs_ = timeBudget.hardMs;
         pondering_ = limits_.ponder;
         nodes_ = 0;
+        iirReductions_ = 0;
         nextTimeCheckNode_ = 0;
         selDepth_ = 0;
         for (auto& row : pv_)
@@ -1320,6 +1323,8 @@ namespace ironphoenix {
                 break;
         }
 
+        // One diagnostic per search, not per node: negligible hot-path cost.
+        out << "info string iir reductions " << iirReductions_ << '\n';
         emitBestMove(out, bestMove, bestPonderMove);
     }
 

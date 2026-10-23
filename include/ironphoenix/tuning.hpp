@@ -10,27 +10,27 @@ namespace ironphoenix {
     namespace Tuning {
 
         struct SearchParameters final {
-            int aspirationStartDepth = 4;
-            int aspirationInitialDelta = 50;
+            int aspirationStartDepth = 2;
+            int aspirationInitialDelta = 54;
             int seePruneMaxDepth = 4;
-            int seePruneMarginPerDepth = 80;
-            int historyBonusScale = 64;
-            int historyBonusMax = 2048;
-            int counterMoveBonus = 32'000;
-            int checkMoveBonus = 10'000'000;
-            int lmrMinDepth = 3;
-            int lmrFullMoves = 4;
-            int lmrBaseX100 = 78;
-            int lmrDivisorX100 = 286;
-            int lmpHistoryThreshold = 1918;
+            int seePruneMarginPerDepth = 87;
+            int historyBonusScale = 63;
+            int historyBonusMax = 2044;
+            int counterMoveBonus = 31'995;
+            int checkMoveBonus = 9'999'994;
+            int lmrMinDepth = 1;
+            int lmrFullMoves = 6;
+            int lmrBaseX100 = 79;
+            int lmrDivisorX100 = 300;
+            int lmpHistoryThreshold = 1927;
             int hmpMaxDepth = 4;
-            int hmpMarginPerDepth = 1519;
-            int nullMoveMinDepth = 2;
-            int nullMoveDivisor = 192;
+            int hmpMarginPerDepth = 1522;
+            int nullMoveMinDepth = 3;
+            int nullMoveDivisor = 194;
             int rfpMaxDepth = 6;
             int rfpMarginPerDepth = 141;
-            int rfpMinMargin = 88;
-            int rfpMaxImprovingDiscount = 78;
+            int rfpMinMargin = 93;
+            int rfpMaxImprovingDiscount = 82;
             // PV-only IIR at depth 6; cut/all experiments opt-in.
             int iirMinDepth = 6;
             int iirReduction = 1;

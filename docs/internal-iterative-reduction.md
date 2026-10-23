@@ -34,3 +34,36 @@ playing strength and the search tree.
 This feature's default is active only at sufficiently deep internal PV
 nodes. It need not raise raw nodes/second (NPS); compare Elo and time
 to depth rather than assuming a speedup from a smaller search.
+
+
+## Updated tuned search defaults
+
+The search structure now includes the user's latest SPSA values for all
+21 non-IIR parameters. `uci` reports the live `SearchParameters{}`
+defaults rather than stale hard-coded literals. Existing evaluation
+parameters are unchanged.
+
+## Is IIR actually running?
+
+By design, the default policy only reduces **internal PV nodes at depth
+at least six** with **no TT move** and **neither king in check**. In iterative
+deepening the PV nodes frequently have TT moves from earlier iterations;
+therefore a zero count at short time controls is entirely possible.
+
+After each completed regular or MultiPV search, the engine emits
+`info string iir reductions N` immediately before `bestmove`. This is
+the count of **actual depth reductions applied**, not just considered nodes.
+The counter resets on each search. With the supplied cut/all defaults
+both zero, enabling IIR at non-PV nodes requires an explicit UCI change
+and independent playing-strength testing.
+
+Example:
+```text
+setoption name SearchIIRMinDepth value 6
+setoption name SearchIIRReduction value 1
+setoption name SearchIIRCutNode value 1
+setoption name SearchIIRAllNode value 0
+go depth 10
+```
+This example changes search behavior only if explicitly entered; the
+repository defaults remain PV-only.
