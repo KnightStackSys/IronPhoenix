@@ -97,7 +97,6 @@ namespace ironphoenix {
         std::int64_t hardTimeBudgetMs_ = 0;
         bool pondering_ = false;
         std::uint64_t nodes_ = 0;
-        std::uint64_t iirReductions_ = 0;
         std::uint64_t nextTimeCheckNode_ = 0;
         int selDepth_ = 0;
 

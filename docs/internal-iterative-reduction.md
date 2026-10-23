@@ -22,9 +22,6 @@ also removed from `negamax`.
 All other tuned search and evaluation values are unchanged. A safety clamp
 keeps the remaining depth >= 1, even when tuning a large reduction.
 
-The engine emits `info string iir reductions N` before the bestmove
-for each normal/MultiPV search. This counts applied depth reductions.
-
 **Important:** Applying IIR during checks, at the root and at non-PV
 nodes can reduce tactical accuracy and playing strength. Run independent
 paired SPRT before merging this aggressive variant into `main`.

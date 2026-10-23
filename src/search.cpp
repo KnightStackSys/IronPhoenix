@@ -810,10 +810,8 @@ namespace ironphoenix {
         // once the configured depth is reached without a TT ordering move.
         // The helper clamps the reduction to keep depth >= 1.
         const int iir = IIR::reduction(depth, static_cast<bool>(ttMove), tuning);
-        if (iir > 0) {
+        if (iir > 0)
             depth -= iir;
-            ++iirReductions_;
-        }
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);
@@ -1112,7 +1110,6 @@ namespace ironphoenix {
         hardTimeBudgetMs_ = timeBudget.hardMs;
         pondering_ = limits_.ponder;
         nodes_ = 0;
-        iirReductions_ = 0;
         nextTimeCheckNode_ = 0;
         selDepth_ = 0;
         for (auto& row : pv_)
@@ -1312,8 +1309,6 @@ namespace ironphoenix {
                 break;
         }
 
-        // One diagnostic per search, not per node: negligible hot-path cost.
-        out << "info string iir reductions " << iirReductions_ << '\n';
         emitBestMove(out, bestMove, bestPonderMove);
     }
 
