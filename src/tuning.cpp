@@ -57,9 +57,7 @@ namespace ironphoenix::Tuning {
                 || name == "SearchRFPMinMargin"
                 || name == "SearchRFPMaxImprovingDiscount"
                 || name == "SearchIIRMinDepth"
-                || name == "SearchIIRReduction"
-                || name == "SearchIIRCutNode"
-                || name == "SearchIIRAllNode";
+                || name == "SearchIIRReduction";
         }
 
         bool isEvalParameter(std::string_view name) noexcept {
@@ -172,10 +170,6 @@ namespace ironphoenix::Tuning {
             p.iirMinDepth = value;
         else if (name == "SearchIIRReduction" && inRange(value, 0, 4))
             p.iirReduction = value;
-        else if (name == "SearchIIRCutNode" && inRange(value, 0, 1))
-            p.iirCutNode = value;
-        else if (name == "SearchIIRAllNode" && inRange(value, 0, 1))
-            p.iirAllNode = value;
         else
             changed = false;
 
@@ -307,8 +301,6 @@ namespace ironphoenix::Tuning {
             << "option name SearchRFPMaxImprovingDiscount type spin default " << searchDefaults.rfpMaxImprovingDiscount << " min 0 max 5000\n"
             << "option name SearchIIRMinDepth type spin default " << searchDefaults.iirMinDepth << " min 2 max 32\n"
             << "option name SearchIIRReduction type spin default " << searchDefaults.iirReduction << " min 0 max 4\n"
-            << "option name SearchIIRCutNode type spin default " << searchDefaults.iirCutNode << " min 0 max 1\n"
-            << "option name SearchIIRAllNode type spin default " << searchDefaults.iirAllNode << " min 0 max 1\n"
             << "option name EvalPawnValue type spin default " << defaults.pawnValue << " min 0 max 5000\n"
             << "option name EvalKnightValue type spin default " << defaults.knightValue << " min 0 max 5000\n"
             << "option name EvalBishopValue type spin default " << defaults.bishopValue << " min 0 max 5000\n"
@@ -359,9 +351,7 @@ namespace ironphoenix::Tuning {
             << " SearchRFPMinMargin=" << s.rfpMinMargin
             << " SearchRFPMaxImprovingDiscount=" << s.rfpMaxImprovingDiscount
             << " SearchIIRMinDepth=" << s.iirMinDepth
-            << " SearchIIRReduction=" << s.iirReduction
-            << " SearchIIRCutNode=" << s.iirCutNode
-            << " SearchIIRAllNode=" << s.iirAllNode << '\n';
+            << " SearchIIRReduction=" << s.iirReduction << '\n';
 
         out << "info string EvalPawnValue=" << e.pawnValue
             << " EvalKnightValue=" << e.knightValue

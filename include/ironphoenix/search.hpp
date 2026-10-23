@@ -109,9 +109,8 @@ namespace ironphoenix {
         void run(Position position, std::ostream& out);
         void runMultiPV(Position position, int multiPV, std::ostream& out);
 
-        // Expected cut/all node type propagated through PVS.
         int negamax(Position& pos, int depth, int alpha, int beta, int ply,
-                    bool pvNode, bool allowNull = true, bool cutNode = false);
+                    bool pvNode, bool allowNull = true);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
         void recordStackEvaluation(int ply, int score) noexcept;

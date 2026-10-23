@@ -689,7 +689,7 @@ namespace ironphoenix {
     }
 
     int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply,
-                              bool pvNode, bool allowNull, bool cutNode) {
+                              bool pvNode, bool allowNull) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
@@ -697,10 +697,6 @@ namespace ironphoenix {
 
         if (depth <= 0)
             return qsearch(pos, alpha, beta, ply, pvNode);
-
-        // Preserve non-PV cut/all node type propagation from the original branch.
-        cutNode = !pvNode && cutNode;
-        const bool allNode = !pvNode && !cutNode;
 
         auto& ss = searchStack_[ply];
         ss.beginNode(pos.sideToMove(), depth, pvNode);
@@ -795,7 +791,6 @@ namespace ironphoenix {
                     -beta + 1,
                     ply + 1,
                     false,
-                    false,
                     false
                 );
                 
@@ -811,12 +806,11 @@ namespace ironphoenix {
             }
         }
 
-        // Apply IIR only after TT/RFP/NMP. When either king on the
-        // moving team is checked, retain the full search depth.
-        const int iir = IIR::reduction(depth, ply, pvNode, cutNode,
-            static_cast<bool>(ttMove), inCheckNode, tuning);
-        if (iir > 0
-            && !pos.inCheck(static_cast<Color>(static_cast<unsigned>(us) ^ 2u))) {
+        // IIR applies at any search node (PV, cut, all, root, or check)
+        // once the configured depth is reached without a TT ordering move.
+        // The helper clamps the reduction to keep depth >= 1.
+        const int iir = IIR::reduction(depth, static_cast<bool>(ttMove), tuning);
+        if (iir > 0) {
             depth -= iir;
             ++iirReductions_;
         }
@@ -940,8 +934,7 @@ namespace ironphoenix {
                     ++legalMoves;
                     ss.moveCount = legalMoves;
                     if (legalMoves == 1) {
-                        score = -negamax(pos, depth - 1, -beta, -alpha, ply + 1,
-                            pvNode, true, allNode);
+                        score = -negamax(pos, depth - 1, -beta, -alpha, ply + 1, pvNode);
                     }
                     else {
 
@@ -959,21 +952,17 @@ namespace ironphoenix {
 
                         if (reduction > 0) {
                             const int reducedDepth = depth - 1 - reduction;
-                            score = -negamax(pos, reducedDepth, -alpha - 1, -alpha,
-                                ply + 1, false, true, true);
+                            score = -negamax(pos, reducedDepth, -alpha - 1, -alpha, ply + 1, false);
 
                             if (!shouldStop() && score > alpha)
-                                score = -negamax(pos, depth - 1, -alpha - 1, -alpha,
-                                    ply + 1, false, true, true);
+                                score = -negamax(pos, depth - 1, -alpha - 1, -alpha, ply + 1, false);
                         }
                         else {
-                            score = -negamax(pos, depth - 1, -alpha - 1, -alpha,
-                                ply + 1, false, true, true);
+                            score = -negamax(pos, depth - 1, -alpha - 1, -alpha, ply + 1, false);
                         }
 
                         if (!shouldStop() && score > alpha && score < beta)
-                            score = -negamax(pos, depth - 1, -beta, -alpha,
-                                ply + 1, pvNode, true, false);
+                            score = -negamax(pos, depth - 1, -beta, -alpha, ply + 1, pvNode);
                     }
                 }
                 pos.undoMove(move, st);

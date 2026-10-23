@@ -31,11 +31,9 @@ namespace ironphoenix {
             int rfpMarginPerDepth = 141;
             int rfpMinMargin = 93;
             int rfpMaxImprovingDiscount = 82;
-            // PV-only IIR at depth 6; cut/all experiments opt-in.
+            // Applies to every search node without a TT move at depth >= 6.
             int iirMinDepth = 6;
             int iirReduction = 1;
-            int iirCutNode = 0;
-            int iirAllNode = 0;
         };
 
         struct EvalParameters final {
