@@ -200,11 +200,26 @@ int main() {
     kingTest.placePiece(sq('g', 8), makePiece(BLUE, ROOK));
     kingTest.placePiece(sq('j', 9), makePiece(GREEN, QUEEN));
     kingTest.finalizeSetup();
+    for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+        kingTest.setSideToMove(static_cast<Color>(ci));
+        kingTest.finalizeSetup();
+        Tuning::search().kingRayPrefilter = 0;
+        const int reference = Eval::evaluate(kingTest);
+        Tuning::search().kingRayPrefilter = 1;
+        expect(Eval::evaluate(kingTest) == reference,
+               "ray prefilter preserves score for each moving color");
+    }
+    auto queenXray = kings();
+    queenXray.placePiece(sq('g', 2), makePiece(RED, QUEEN));
+    queenXray.placePiece(sq('g', 3), makePiece(RED, PAWN));
+    queenXray.placePiece(sq('g', 8), makePiece(BLUE, ROOK));
+    queenXray.placePiece(sq('i', 9), makePiece(GREEN, BISHOP));
+    queenXray.finalizeSetup();
     Tuning::search().kingRayPrefilter = 0;
-    const int withoutRayPrefilter = Eval::evaluate(kingTest);
+    const int queenWithout = Eval::evaluate(queenXray);
     Tuning::search().kingRayPrefilter = 1;
-    expect(Eval::evaluate(kingTest) == withoutRayPrefilter,
-           "ray prefilter preserves exact king pin/xray score");
+    expect(Eval::evaluate(queenXray) == queenWithout,
+           "queen X-ray score unchanged with geometric prefilter");
     Tuning::resetSearch();
     expect(!NNUE::loaded(), "king evaluation features apply to HCE");
     testOptions();

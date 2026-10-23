@@ -17,6 +17,44 @@ Branch: \`feature/king-evaluation\`. Keep \`main\` stable until Elo tests.
 - Benchmark \`ironphoenix_nps_bench\` now measures feature groups in addition
   to its original fixed-position search throughput.
 
+## Latest exact evaluation speedups
+
+- `SearchPawnAttackCache=1` (default): Each worker caches the union
+  of each color's pawn attack bitboards by **all three pawn-bitboard words**.
+  Pawn structures often repeat even when non-pawn pieces change. Values
+  remain exact; the thread-local cache cannot race between SMP workers.
+- `SearchKingRayPrefilter=1` (default): Precomputed geometric rank/file/
+  diagonal rays reject king and queen pin/X-ray probes when no opposing
+  slider is even aligned with the target. All four-color evaluation
+  scores are preserved.
+- Quiescence **lazy tactical picking was tested then reverted**, because
+  it measured 512,945 NPS versus 516,048 NPS with ordinary full sorting.
+
+Diagnostic same-runner Linux CI comparisons (individual experiments,
+not additive or directly predictive of your CPU):
+
+| Optimization | Disabled | Enabled | Difference |
+|---|---:|---:|---:|
+| Pawn attack cache | 510,898 | 524,508 | +2.7% |
+| King ray prefilter | 509,880 | 537,731 | +5.5% |
+
+Both switches accept `0` to disable and `1` to enable in UCI. These
+are HCE optimizations; loaded NNUE bypasses handcrafted evaluation.
+
+### Additional build experiment: whole-program optimization
+
+CMake supports interprocedural optimization through its built-in option.
+On MSVC, test a separate Release build with
+
+```powershell
+cmake -S . -B build-ipo -DIRONPHOENIX_NATIVE_CPU=ON -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON
+cmake --build build-ipo --config Release --parallel
+```
+
+This may improve inlining across translation units, but has **not** been
+benchmarked or validated for this repository's toolchain. Compare to
+the native Release build with IPO disabled on the same machine.
+
 ## Native CPU Release build (opt-in)
 
 CMake option: \`IRONPHOENIX_NATIVE_CPU=ON\` (default OFF).
