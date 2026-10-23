@@ -168,11 +168,17 @@ int main(int argc, char** argv) {
     Tuning::search() = originalSearch;
     const bool pawnCacheOnDone = measure("pawn-attack-cache-enabled");
 
+    Tuning::search().kingRayPrefilter = 0;
+    const bool rayOffDone = measure("king-ray-prefilter-disabled");
+    Tuning::search() = originalSearch;
+    const bool rayOnDone = measure("king-ray-prefilter-enabled");
+
     // This is a diagnostic, not an NPS threshold test. CI runner CPU differs
     // from local hardware, and iteration counters may be below node budget.
     return (finished && pinsDone && pawnsDone && threatDone
         && noKingDone && originalOrderingDone
         && cacheDisabledDone && cacheEnabledDone
         && fullLegalityDone && fastLegalityDone
-        && pawnCacheOffDone && pawnCacheOnDone) ? 0 : 1;
+        && pawnCacheOffDone && pawnCacheOnDone
+        && rayOffDone && rayOnDone) ? 0 : 1;
 }

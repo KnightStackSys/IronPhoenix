@@ -42,6 +42,8 @@ namespace ironphoenix {
             int fastKingLegality = 1;
             // Exact union of pawn attack maps, cached per worker.
             int pawnAttackCache = 1;
+            // Skip impossible slider rays in HCE pins/X-ray scoring.
+            int kingRayPrefilter = 1;
         };
 
         struct EvalParameters final {

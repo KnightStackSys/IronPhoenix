@@ -41,6 +41,8 @@ Square sideSquare(Color c, Square king, int offset) noexcept {
 // The C++11 function-local static initialization is thread-safe for Lazy SMP.
 struct KingMasks {
     Bitboard storm{};
+    Bitboard rookRays{};
+    Bitboard bishopRays{};
     std::array<std::array<Bitboard, 3>, COLOR_NB> shield{};
     std::array<std::array<bool, 3>, COLOR_NB> shieldLane{};
     std::array<std::uint8_t, COLOR_NB> home{};
@@ -59,6 +61,14 @@ struct Lookup {
             if (!Geometry::validXY(f, r))
                 continue;
             auto& m = kings[i];
+            m.rookRays = Geometry::Ray[NORTH][sq]
+                | Geometry::Ray[SOUTH][sq]
+                | Geometry::Ray[EAST][sq]
+                | Geometry::Ray[WEST][sq];
+            m.bishopRays = Geometry::Ray[NORTH_EAST][sq]
+                | Geometry::Ray[NORTH_WEST][sq]
+                | Geometry::Ray[SOUTH_EAST][sq]
+                | Geometry::Ray[SOUTH_WEST][sq];
             m.centralDistance = static_cast<std::uint8_t>(
                 std::min(std::abs(f - 6), std::abs(f - 7))
                 + std::min(std::abs(r - 6), std::abs(r - 7)));
@@ -174,7 +184,12 @@ int rayPressure(const Position& pos, Square target,
                 Bitboard friends, const TeamData& opponents,
                 Bitboard occupancy, Bitboard sliderAttacks) noexcept {
     int count = 0;
-    if (opponents.orthogonalSliders) {
+    const auto& kingMasks = geometryMasks().kings[target];
+    // An x-ray/pin on a king or queen requires a hostile slider already
+    // collinear with it. If none exists, skip occupancy-dependent ray work.
+    if (opponents.orthogonalSliders
+        && (!Tuning::search().kingRayPrefilter
+            || (opponents.orthogonalSliders & kingMasks.rookRays))) {
         Bitboard screens = pos.rookAttacks(target) & friends & sliderAttacks;
         while (screens) {
             const Square screen = popLsb(screens);
@@ -189,7 +204,9 @@ int rayPressure(const Position& pos, Square target,
                 ++count;
         }
     }
-    if (opponents.diagonalSliders) {
+    if (opponents.diagonalSliders
+        && (!Tuning::search().kingRayPrefilter
+            || (opponents.diagonalSliders & kingMasks.bishopRays))) {
         Bitboard screens = pos.bishopAttacks(target) & friends & sliderAttacks;
         while (screens) {
             const Square screen = popLsb(screens);

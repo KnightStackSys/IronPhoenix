@@ -193,6 +193,19 @@ void testCastlingRights() {
 
 int main() {
     Geometry::init();
+    // Compare the same exact HCE scores across the geometric ray prefilter
+    // on hand-built king, pin, and queen X-ray positions.
+    auto kingTest = kings();
+    kingTest.placePiece(sq('g', 3), makePiece(RED, KNIGHT));
+    kingTest.placePiece(sq('g', 8), makePiece(BLUE, ROOK));
+    kingTest.placePiece(sq('j', 9), makePiece(GREEN, QUEEN));
+    kingTest.finalizeSetup();
+    Tuning::search().kingRayPrefilter = 0;
+    const int withoutRayPrefilter = Eval::evaluate(kingTest);
+    Tuning::search().kingRayPrefilter = 1;
+    expect(Eval::evaluate(kingTest) == withoutRayPrefilter,
+           "ray prefilter preserves exact king pin/xray score");
+    Tuning::resetSearch();
     expect(!NNUE::loaded(), "king evaluation features apply to HCE");
     testOptions();
     testMiddlegame();
