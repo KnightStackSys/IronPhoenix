@@ -24,6 +24,7 @@ add_library(ironphoenix_core STATIC
     src/tt.cpp
     src/eval.cpp
     src/bishop_eval.cpp
+    src/king_eval.cpp
     src/nnue.cpp
     src/tuning.cpp
     src/search.cpp
@@ -34,6 +35,7 @@ add_library(ironphoenix_core STATIC
     src/uci.cpp
     include/ironphoenix/eval.hpp
     include/ironphoenix/bishop_eval.hpp
+    include/ironphoenix/king_eval.hpp
     include/ironphoenix/search_stack.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
@@ -216,6 +218,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_link_libraries(ironphoenix_knight_outpost PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
+
+    add_executable(ironphoenix_king_features tests/king_features.cpp)
+    target_link_libraries(ironphoenix_king_features PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_king_features PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_king_features COMMAND ironphoenix_king_features)
+    set_target_properties(ironphoenix_king_features PROPERTIES FOLDER "Tests")
 
     add_executable(ironphoenix_bishop_features tests/bishop_features.cpp)
     target_link_libraries(ironphoenix_bishop_features PRIVATE IronPhoenix::Core)

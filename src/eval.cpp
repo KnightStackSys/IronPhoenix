@@ -1,5 +1,6 @@
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/bishop_eval.hpp"
+#include "ironphoenix/king_eval.hpp"
 
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/nnue.hpp"
@@ -119,7 +120,9 @@ namespace ironphoenix::Eval {
                              Bitboard* teamBishopAttacks) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
             const auto& tune = Tuning::eval();
-            const bool scoreThreats = tune.attackingPiecesWeight != 0;
+            const bool scoreThreats = tune.attackingPiecesWeight != 0
+                || tune.kingZoneAttackPenalty != 0
+                || tune.kingMateThreatPenalty != 0;
             const bool scoreBishopWeakness = tune.bishopColorWeaknessPenalty != 0
                 && pos.isAlive(c);
 
@@ -362,7 +365,9 @@ namespace ironphoenix::Eval {
 
             // Team-wise complementary bishop coverage and four seat-oriented
             // pawn/king structures. All new feature weights default to zero.
-            const int score = team0 - team1 + bishopFeatureDifference(pos, bishopAttacks);
+            const int score = team0 - team1
+                + bishopFeatureDifference(pos, bishopAttacks)
+                + kingFeatureDifference(pos, attacks);
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 

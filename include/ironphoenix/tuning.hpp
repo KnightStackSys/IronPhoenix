@@ -55,6 +55,15 @@ namespace ironphoenix {
             int bishopColorWeaknessPenalty = 3;
             int bishopFianchettoBonus = 5;
             int bishopReturningBonus = 22;
+            int kingShieldPenalty = 10;
+            int kingZoneAttackPenalty = 6;
+            int kingPawnStormPenalty = 5;
+            int kingMateThreatPenalty = 30;
+            int kingCentralizationBonus = 4;
+            int kingPawnlessWingPenalty = 14;
+            int kingPinPenalty = 14;
+            int kingXrayPenalty = 8;
+            int kingCastlingRightsBonus = 8;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

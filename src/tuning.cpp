@@ -79,7 +79,16 @@ namespace ironphoenix::Tuning {
                 || name == "EvalBishopVsKnightBonus"
                 || name == "EvalBishopColorWeaknessPenalty"
                 || name == "EvalBishopFianchettoBonus"
-                || name == "EvalBishopReturningBonus";
+                || name == "EvalBishopReturningBonus"
+                || name == "EvalKingShieldPenalty"
+                || name == "EvalKingZoneAttackPenalty"
+                || name == "EvalKingPawnStormPenalty"
+                || name == "EvalKingMateThreatPenalty"
+                || name == "EvalKingCentralizationBonus"
+                || name == "EvalKingPawnlessWingPenalty"
+                || name == "EvalKingPinPenalty"
+                || name == "EvalKingXrayPenalty"
+                || name == "EvalKingCastlingRightsBonus";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -218,6 +227,24 @@ namespace ironphoenix::Tuning {
             p.bishopFianchettoBonus = value;
         else if (name == "EvalBishopReturningBonus" && inRange(value, 0, 100))
             p.bishopReturningBonus = value;
+        else if (name == "EvalKingShieldPenalty" && inRange(value, 0, 200))
+            p.kingShieldPenalty = value;
+        else if (name == "EvalKingZoneAttackPenalty" && inRange(value, 0, 200))
+            p.kingZoneAttackPenalty = value;
+        else if (name == "EvalKingPawnStormPenalty" && inRange(value, 0, 200))
+            p.kingPawnStormPenalty = value;
+        else if (name == "EvalKingMateThreatPenalty" && inRange(value, 0, 1000))
+            p.kingMateThreatPenalty = value;
+        else if (name == "EvalKingCentralizationBonus" && inRange(value, 0, 200))
+            p.kingCentralizationBonus = value;
+        else if (name == "EvalKingPawnlessWingPenalty" && inRange(value, 0, 200))
+            p.kingPawnlessWingPenalty = value;
+        else if (name == "EvalKingPinPenalty" && inRange(value, 0, 200))
+            p.kingPinPenalty = value;
+        else if (name == "EvalKingXrayPenalty" && inRange(value, 0, 200))
+            p.kingXrayPenalty = value;
+        else if (name == "EvalKingCastlingRightsBonus" && inRange(value, 0, 200))
+            p.kingCastlingRightsBonus = value;
         else
             return false;
 
@@ -314,6 +341,15 @@ namespace ironphoenix::Tuning {
             << "option name EvalBishopColorWeaknessPenalty type spin default " << defaults.bishopColorWeaknessPenalty << " min 0 max 100\n"
             << "option name EvalBishopFianchettoBonus type spin default " << defaults.bishopFianchettoBonus << " min 0 max 100\n"
             << "option name EvalBishopReturningBonus type spin default " << defaults.bishopReturningBonus << " min 0 max 100\n"
+            << "option name EvalKingShieldPenalty type spin default " << defaults.kingShieldPenalty << " min 0 max 200\n"
+            << "option name EvalKingZoneAttackPenalty type spin default " << defaults.kingZoneAttackPenalty << " min 0 max 200\n"
+            << "option name EvalKingPawnStormPenalty type spin default " << defaults.kingPawnStormPenalty << " min 0 max 200\n"
+            << "option name EvalKingMateThreatPenalty type spin default " << defaults.kingMateThreatPenalty << " min 0 max 1000\n"
+            << "option name EvalKingCentralizationBonus type spin default " << defaults.kingCentralizationBonus << " min 0 max 200\n"
+            << "option name EvalKingPawnlessWingPenalty type spin default " << defaults.kingPawnlessWingPenalty << " min 0 max 200\n"
+            << "option name EvalKingPinPenalty type spin default " << defaults.kingPinPenalty << " min 0 max 200\n"
+            << "option name EvalKingXrayPenalty type spin default " << defaults.kingXrayPenalty << " min 0 max 200\n"
+            << "option name EvalKingCastlingRightsBonus type spin default " << defaults.kingCastlingRightsBonus << " min 0 max 200\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -363,7 +399,16 @@ namespace ironphoenix::Tuning {
             << " EvalBishopVsKnightBonus=" << e.bishopVsKnightBonus
             << " EvalBishopColorWeaknessPenalty=" << e.bishopColorWeaknessPenalty
             << " EvalBishopFianchettoBonus=" << e.bishopFianchettoBonus
-            << " EvalBishopReturningBonus=" << e.bishopReturningBonus << '\n';
+            << " EvalBishopReturningBonus=" << e.bishopReturningBonus
+            << " EvalKingShieldPenalty=" << e.kingShieldPenalty
+            << " EvalKingZoneAttackPenalty=" << e.kingZoneAttackPenalty
+            << " EvalKingPawnStormPenalty=" << e.kingPawnStormPenalty
+            << " EvalKingMateThreatPenalty=" << e.kingMateThreatPenalty
+            << " EvalKingCentralizationBonus=" << e.kingCentralizationBonus
+            << " EvalKingPawnlessWingPenalty=" << e.kingPawnlessWingPenalty
+            << " EvalKingPinPenalty=" << e.kingPinPenalty
+            << " EvalKingXrayPenalty=" << e.kingXrayPenalty
+            << " EvalKingCastlingRightsBonus=" << e.kingCastlingRightsBonus << '\n';
     }
 
 } // namespace ironphoenix::Tuning
