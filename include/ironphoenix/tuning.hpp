@@ -34,28 +34,27 @@ namespace ironphoenix {
         };
 
         struct EvalParameters final {
-            int pawnValue = 107;
-            int knightValue = 308;
-            int bishopValue = 394;
-            int rookValue = 504;
-            int queenValue = 1015;
-            int knightMobility = 9;
-            int bishopMobility = 7;
+            int pawnValue = 106;
+            int knightValue = 303;
+            int bishopValue = 455;
+            int rookValue = 466;
+            int queenValue = 1047;
+            int knightMobility = 14;
+            int bishopMobility = 5;
             int rookMobility = 16;
-            int queenMobility = 10;
-            int attackingPiecesWeight = 98;
-            int knightCheckThreatPenalty = 9;
-            int knightDevelopmentBonus = 9;
-            int knightEnemyPressureBonus = 4;
-            int knightKingApproachBonus = 7;
-            int knightOutpostBonus = 13;
-            // Experimental 4PC Teams bishop terms: off by default for A/B testing.
-            int badBishopPenalty = 0;
-            int bishopPairBonus = 0;
-            int bishopVsKnightBonus = 0;
-            int bishopColorWeaknessPenalty = 0;
-            int bishopFianchettoBonus = 0;
-            int bishopReturningBonus = 0;
+            int queenMobility = 6;
+            int attackingPiecesWeight = 120;
+            int knightCheckThreatPenalty = 5;
+            int knightDevelopmentBonus = 17;
+            int knightEnemyPressureBonus = 18;
+            int knightKingApproachBonus = 5;
+            int knightOutpostBonus = 2;
+            int badBishopPenalty = 1;
+            int bishopPairBonus = 51;
+            int bishopVsKnightBonus = 36;
+            int bishopColorWeaknessPenalty = 3;
+            int bishopFianchettoBonus = 5;
+            int bishopReturningBonus = 22;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;
