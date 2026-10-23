@@ -151,6 +151,14 @@ namespace ironphoenix {
 
     void SearchEngine::start(Position position, SearchLimits limits, std::ostream& out) {
         stopAndWait();
+        // One search always sees one set of tuning weights; do not reuse HCE
+        // entries across successive searches or engine option changes.
+        if (++evalCacheEpoch_ == 0) {
+            evalCacheEpoch_ = 1;
+            evalCache_.fill(EvalCacheEntry{});
+        }
+        evalCacheHits_ = 0;
+        evalCacheActive_ = true;
         stopRequested_.store(false, std::memory_order_relaxed);
         ponderHitRequested_.store(false, std::memory_order_relaxed);
         searching_.store(true, std::memory_order_relaxed);
@@ -445,7 +453,21 @@ namespace ironphoenix {
     }
 
     int SearchEngine::evaluate(const Position& pos) const noexcept {
-        return Eval::evaluate(pos);
+        if (!evalCacheActive_ || !Tuning::search().evalCacheEnabled)
+            return Eval::evaluate(pos);
+
+        const Key key = pos.key();
+        EvalCacheEntry& entry =
+            evalCache_[static_cast<std::size_t>(key) & (EVAL_CACHE_CAPACITY - 1)];
+        if (entry.epoch == evalCacheEpoch_ && entry.key == key) {
+            ++evalCacheHits_;
+            return entry.score;
+        }
+        const int score = Eval::evaluate(pos);
+        entry.key = key;
+        entry.score = score;
+        entry.epoch = evalCacheEpoch_;
+        return score;
     }
 
     int SearchEngine::historyBonus(int depth) const noexcept {

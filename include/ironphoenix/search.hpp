@@ -98,6 +98,21 @@ namespace ironphoenix {
         bool helperMode_ = false;
         int helperIndex_ = 0;
         int threads_ = 1;
+
+        // Search-local, worker-private HCE cache. Lazily invalidated by epoch
+        // at every start, so changed tuning/network settings never leave stale
+        // evaluations. Avoid contention between Lazy SMP workers.
+        static constexpr std::size_t EVAL_CACHE_CAPACITY = 1u << 14;
+        struct EvalCacheEntry {
+            Key key = 0;
+            int score = 0;
+            std::uint32_t epoch = 0;
+        };
+        mutable std::array<EvalCacheEntry, EVAL_CACHE_CAPACITY> evalCache_{};
+        mutable std::uint64_t evalCacheHits_ = 0;
+        std::uint32_t evalCacheEpoch_ = 1;
+        bool evalCacheActive_ = false;
+
         HistoryTables history_{};
         std::thread worker_;
         std::atomic<bool> stopRequested_{ false };

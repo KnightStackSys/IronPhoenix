@@ -34,6 +34,9 @@ namespace ironphoenix {
             // 1 = cheaply reject geometrically impossible quiet checks.
             // 0 = original full givesCheck() for A/B benchmarking.
             int fastCheckPrefilter = 1;
+            // Exact full-evaluation cache, private to each search worker.
+            // Set 0 to disable for NPS/SPRT comparisons.
+            int evalCacheEnabled = 1;
         };
 
         struct EvalParameters final {

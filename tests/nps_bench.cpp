@@ -153,8 +153,14 @@ int main(int argc, char** argv) {
     const bool originalOrderingDone = measure("fast-check-prefilter-disabled");
     Tuning::search() = originalSearch;
 
+    Tuning::search().evalCacheEnabled = 0;
+    const bool cacheDisabledDone = measure("eval-cache-disabled");
+    Tuning::search() = originalSearch;
+    const bool cacheEnabledDone = measure("eval-cache-enabled");
+
     // This is a diagnostic, not an NPS threshold test. CI runner CPU differs
     // from local hardware, and iteration counters may be below node budget.
     return (finished && pinsDone && pawnsDone && threatDone
-        && noKingDone && originalOrderingDone) ? 0 : 1;
+        && noKingDone && originalOrderingDone
+        && cacheDisabledDone && cacheEnabledDone) ? 0 : 1;
 }
