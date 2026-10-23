@@ -34,6 +34,7 @@ add_library(ironphoenix_core STATIC
     src/uci.cpp
     include/ironphoenix/eval.hpp
     include/ironphoenix/bishop_eval.hpp
+    include/ironphoenix/iir.hpp
     include/ironphoenix/search_stack.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
@@ -210,6 +211,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_link_libraries(ironphoenix_knight_outpost PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
+
+    add_executable(ironphoenix_iir tests/iir.cpp)
+    target_link_libraries(ironphoenix_iir PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_iir PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_iir COMMAND ironphoenix_iir)
+    set_target_properties(ironphoenix_iir PROPERTIES FOLDER "Tests")
 
     add_executable(ironphoenix_bishop_features tests/bishop_features.cpp)
     target_link_libraries(ironphoenix_bishop_features PRIVATE IronPhoenix::Core)

@@ -2,6 +2,7 @@
 
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/lmr.hpp"
+#include "ironphoenix/iir.hpp"
 #include "ironphoenix/tuning.hpp"
 
 #include "ironphoenix/movegen.hpp"
@@ -687,7 +688,8 @@ namespace ironphoenix {
         return false;
     }
 
-    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply, bool pvNode, bool allowNull) {
+    int SearchEngine::negamax(Position& pos, int depth, int alpha, int beta, int ply,
+                              bool pvNode, bool allowNull) {
         if (ply >= MAX_PLY - 1)
             return evaluate(pos);
         if (shouldStop())
@@ -803,6 +805,13 @@ namespace ironphoenix {
                     return nullScore;
             }
         }
+
+        // IIR applies at any search node (PV, cut, all, root, or check)
+        // once the configured depth is reached without a TT ordering move.
+        // The helper clamps the reduction to keep depth >= 1.
+        const int iir = IIR::reduction(depth, static_cast<bool>(ttMove), tuning);
+        if (iir > 0)
+            depth -= iir;
 
         MoveList moves;
         generatePseudoLegalMoves(pos, moves);

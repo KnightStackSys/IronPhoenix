@@ -85,6 +85,8 @@ void testRootMate(bool multiPV) {
     expect(completed, multiPV ? "MultiPV returned promptly on mate" : "root search returned promptly on mate");
     expect(text.find("score mate 1") != std::string::npos, "engine reports winning mate in one");
     expect(text.find("bestmove d7a7") != std::string::npos, "engine returns king-capturing move");
+    expect(text.find("info string iir reductions ") == std::string::npos,
+           "search does not emit IIR diagnostic reporting");
     expect(text.find("info depth 2 ") == std::string::npos, "no further deepening after winning mate");
     if (multiPV) {
         expect(text.find("multipv 1 ") != std::string::npos, "MultiPV top line emitted");
