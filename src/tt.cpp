@@ -86,7 +86,10 @@ bool TranspositionTable::probe(Key key, int ply, TTProbe& out) const noexcept {
     if (table_.empty())
         return false;
 
-    const Cluster& cluster = table_[static_cast<std::size_t>(key) & mask_];
+    const std::size_t index = static_cast<std::size_t>(key) & mask_;
+    std::unique_lock<std::mutex> guard(locks_[index % LOCK_STRIPES], std::defer_lock);
+    if (concurrent_) guard.lock();
+    const Cluster& cluster = table_[index];
     for (const Entry& entry : cluster.entry) {
         if (entry.key == key && entry.key != 0) {
             out.hit = true;
@@ -111,7 +114,10 @@ void TranspositionTable::store(Key key,
     if (table_.empty())
         return;
 
-    Cluster& cluster = table_[static_cast<std::size_t>(key) & mask_];
+    const std::size_t index = static_cast<std::size_t>(key) & mask_;
+    std::unique_lock<std::mutex> guard(locks_[index % LOCK_STRIPES], std::defer_lock);
+    if (concurrent_) guard.lock();
+    Cluster& cluster = table_[index];
     Entry* replace = &cluster.entry[0];
 
     for (Entry& entry : cluster.entry) {
@@ -155,6 +161,8 @@ int TranspositionTable::hashfull() const noexcept {
     std::size_t used = 0;
     std::size_t total = samples * 4;
     for (std::size_t i = 0; i < samples; ++i) {
+        std::unique_lock<std::mutex> guard(locks_[i % LOCK_STRIPES], std::defer_lock);
+        if (concurrent_) guard.lock();
         for (const Entry& entry : table_[i].entry) {
             if (entry.key != 0 && generationOf(entry) == generation_)
                 ++used;
