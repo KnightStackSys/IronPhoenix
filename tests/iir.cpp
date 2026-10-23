@@ -15,6 +15,12 @@ int failures = 0;
 void expect(bool passed, const char* name) {
     if (!passed) { std::cerr << "FAIL: " << name << '\n'; ++failures; }
 }
+
+int reduce(int depth, bool hasTTMove) {
+    return IIR::reduction(depth, hasTTMove, Tuning::search());
+}
+} // namespace
+
 int main() {
     Geometry::init();
     Tuning::resetSearch();
