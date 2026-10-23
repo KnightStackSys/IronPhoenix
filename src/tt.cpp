@@ -87,21 +87,28 @@ bool TranspositionTable::probe(Key key, int ply, TTProbe& out) const noexcept {
         return false;
 
     const std::size_t index = static_cast<std::size_t>(key) & mask_;
-    std::unique_lock<std::mutex> guard(locks_[index % LOCK_STRIPES], std::defer_lock);
-    if (concurrent_) guard.lock();
-    const Cluster& cluster = table_[index];
-    for (const Entry& entry : cluster.entry) {
-        if (entry.key == key && entry.key != 0) {
-            out.hit = true;
-            out.move = Move(entry.move);
-            out.score = scoreFromTT(entry.score, ply);
-            out.depth = entry.depth;
-            out.bound = boundOf(entry);
-            out.pvNode = pvOf(entry);
-            return true;
+    // The common Threads=1 path should not even construct a lock.
+    // Concurrent Lazy SMP workers lock the same cluster stripe for probes
+    // and writes, so entries remain coherent across cores.
+    const auto probeCluster = [&]() noexcept {
+        const Cluster& cluster = table_[index];
+        for (const Entry& entry : cluster.entry) {
+            if (entry.key == key && entry.key != 0) {
+                out.hit = true;
+                out.move = Move(entry.move);
+                out.score = scoreFromTT(entry.score, ply);
+                out.depth = entry.depth;
+                out.bound = boundOf(entry);
+                out.pvNode = pvOf(entry);
+                return true;
+            }
         }
-    }
-    return false;
+        return false;
+    };
+    if (!concurrent_)
+        return probeCluster();
+    std::lock_guard<std::mutex> lock(locks_[index % LOCK_STRIPES]);
+    return probeCluster();
 }
 
 void TranspositionTable::store(Key key,
@@ -115,42 +122,48 @@ void TranspositionTable::store(Key key,
         return;
 
     const std::size_t index = static_cast<std::size_t>(key) & mask_;
-    std::unique_lock<std::mutex> guard(locks_[index % LOCK_STRIPES], std::defer_lock);
-    if (concurrent_) guard.lock();
-    Cluster& cluster = table_[index];
-    Entry* replace = &cluster.entry[0];
-
-    for (Entry& entry : cluster.entry) {
-        if (entry.key == key) {
-            replace = &entry;
-            break;
+    const auto storeCluster = [&]() noexcept {
+        Cluster& cluster = table_[index];
+        Entry* replace = &cluster.entry[0];
+        const auto replacementScore = [&](const Entry& entry) noexcept {
+            const unsigned age = (generation_ - generationOf(entry))
+                & (GENERATION_MOD - 1u);
+            return static_cast<int>(entry.depth) - static_cast<int>(age) * 4
+                + (pvOf(entry) ? 2 : 0);
+        };
+        int replaceValue = replacementScore(*replace);
+        for (Entry& entry : cluster.entry) {
+            if (entry.key == key || entry.key == 0) {
+                replace = &entry;
+                break;
+            }
+            const int value = replacementScore(entry);
+            if (value < replaceValue) {
+                replaceValue = value;
+                replace = &entry;
+            }
         }
-        if (entry.key == 0) {
-            replace = &entry;
-            break;
-        }
 
-        const unsigned age = (generation_ - generationOf(entry)) & (GENERATION_MOD - 1u);
-        const int value = static_cast<int>(entry.depth) - static_cast<int>(age) * 4 + (pvOf(entry) ? 2 : 0);
+        Move move = bestMove;
+        if (!move && replace->key == key)
+            move = Move(replace->move);
 
-        const unsigned replaceAge = (generation_ - generationOf(*replace)) & (GENERATION_MOD - 1u);
-        const int replaceValue = static_cast<int>(replace->depth) - static_cast<int>(replaceAge) * 4
-                               + (pvOf(*replace) ? 2 : 0);
-        if (value < replaceValue)
-            replace = &entry;
+        const int ttScore = scoreToTT(score, ply);
+        replace->key = key;
+        replace->move = move.v;
+        replace->score = static_cast<std::int16_t>(std::clamp(ttScore, -32767, 32767));
+        replace->depth = static_cast<std::int8_t>(std::clamp(depth, -1, 127));
+        replace->flags = static_cast<std::uint8_t>(
+            static_cast<std::uint8_t>(bound)
+            | (pvNode ? PV_MASK : 0u)
+            | ((generation_ & (GENERATION_MOD - 1u)) << GENERATION_SHIFT));
+    };
+    if (!concurrent_) {
+        storeCluster();
+        return;
     }
-
-    if (!bestMove && replace->key == key)
-        bestMove = Move(replace->move);
-
-    const int ttScore = scoreToTT(score, ply);
-    replace->key = key;
-    replace->move = bestMove.v;
-    replace->score = static_cast<std::int16_t>(std::clamp(ttScore, -32767, 32767));
-    replace->depth = static_cast<std::int8_t>(std::clamp(depth, -1, 127));
-    replace->flags = static_cast<std::uint8_t>(static_cast<std::uint8_t>(bound)
-                     | (pvNode ? PV_MASK : 0u)
-                     | ((generation_ & (GENERATION_MOD - 1u)) << GENERATION_SHIFT));
+    std::lock_guard<std::mutex> lock(locks_[index % LOCK_STRIPES]);
+    storeCluster();
 }
 
 int TranspositionTable::hashfull() const noexcept {
