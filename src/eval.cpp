@@ -1,4 +1,5 @@
 #include "ironphoenix/eval.hpp"
+#include "ironphoenix/bishop_eval.hpp"
 
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/nnue.hpp"
@@ -114,9 +115,13 @@ namespace ironphoenix::Eval {
         }
 
         int mobilityForColor(const Position& pos, Color c,
-                             Bitboard& teamAttacks, unsigned& teamOutposts) noexcept {
+                             Bitboard& teamAttacks, unsigned& teamOutposts,
+                             Bitboard* teamBishopAttacks) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
-            const bool scoreThreats = Tuning::eval().attackingPiecesWeight != 0;
+            const auto& tune = Tuning::eval();
+            const bool scoreThreats = tune.attackingPiecesWeight != 0;
+            const bool scoreBishopWeakness = tune.bishopColorWeaknessPenalty != 0
+                && pos.isAlive(c);
 
             int score = 0;
 
@@ -144,6 +149,12 @@ namespace ironphoenix::Eval {
                         break;
                     }
 
+                    // Reuse these already-computed slider attacks in the bishop
+                    // king-color weakness term. No second bishop attack lookup.
+                    if (pt == BISHOP && scoreBishopWeakness) {
+                        const int color = (Geometry::fileOf(sq) + Geometry::rankOf(sq)) & 1;
+                        teamBishopAttacks[color] |= attacks;
+                    }
                     const int mobility = (attacks & ~blockedByTeam).popcount();
                     score += mobility * mobilityWeight(pt);
                     // No second knight scan. Cap at TWO scored outposts
@@ -324,13 +335,14 @@ namespace ironphoenix::Eval {
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
+            Bitboard bishopAttacks[2][2]{};
             unsigned knightOutposts[2]{};
 
             for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
                 const Color c = static_cast<Color>(ci);
                 const int score = materialForColor(pos, c)
                     + mobilityForColor(pos, c, attacks[teamOf(c)],
-                                       knightOutposts[teamOf(c)])
+                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)])
                     + knightDevelopmentForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
@@ -348,7 +360,9 @@ namespace ironphoenix::Eval {
             team0 -= imminentKnightCheckPenalty(pos, RED, YELLOW, BLUE, GREEN);
             team1 -= imminentKnightCheckPenalty(pos, BLUE, GREEN, RED, YELLOW);
 
-            const int score = team0 - team1;
+            // Team-wise complementary bishop coverage and four seat-oriented
+            // pawn/king structures. All new feature weights default to zero.
+            const int score = team0 - team1 + bishopFeatureDifference(pos, bishopAttacks);
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 

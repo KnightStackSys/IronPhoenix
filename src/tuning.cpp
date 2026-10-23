@@ -73,7 +73,13 @@ namespace ironphoenix::Tuning {
                 || name == "EvalKnightDevelopmentBonus"
                 || name == "EvalKnightEnemyPressureBonus"
                 || name == "EvalKnightKingApproachBonus"
-                || name == "EvalKnightOutpostBonus";
+                || name == "EvalKnightOutpostBonus"
+                || name == "EvalBadBishopPenalty"
+                || name == "EvalBishopPairBonus"
+                || name == "EvalBishopVsKnightBonus"
+                || name == "EvalBishopColorWeaknessPenalty"
+                || name == "EvalBishopFianchettoBonus"
+                || name == "EvalBishopReturningBonus";
         }
 
         bool isLmrParameter(std::string_view name) noexcept {
@@ -200,6 +206,18 @@ namespace ironphoenix::Tuning {
             p.knightKingApproachBonus = value;
         else if (name == "EvalKnightOutpostBonus" && inRange(value, 0, 50))
             p.knightOutpostBonus = value;
+        else if (name == "EvalBadBishopPenalty" && inRange(value, 0, 100))
+            p.badBishopPenalty = value;
+        else if (name == "EvalBishopPairBonus" && inRange(value, 0, 100))
+            p.bishopPairBonus = value;
+        else if (name == "EvalBishopVsKnightBonus" && inRange(value, 0, 100))
+            p.bishopVsKnightBonus = value;
+        else if (name == "EvalBishopColorWeaknessPenalty" && inRange(value, 0, 100))
+            p.bishopColorWeaknessPenalty = value;
+        else if (name == "EvalBishopFianchettoBonus" && inRange(value, 0, 100))
+            p.bishopFianchettoBonus = value;
+        else if (name == "EvalBishopReturningBonus" && inRange(value, 0, 100))
+            p.bishopReturningBonus = value;
         else
             return false;
 
@@ -252,6 +270,7 @@ namespace ironphoenix::Tuning {
     }
 
     void printUciOptions(std::ostream& out) {
+        const EvalParameters defaults{};
         out << "option name SearchAspirationStartDepth type spin default 4 min 1 max 32\n"
             << "option name SearchAspirationDelta type spin default 50 min 1 max 2000\n"
             << "option name SearchSEEPruneMaxDepth type spin default 4 min 0 max 32\n"
@@ -273,21 +292,27 @@ namespace ironphoenix::Tuning {
             << "option name SearchRFPMarginPerDepth type spin default 141 min 0 max 5000\n"
             << "option name SearchRFPMinMargin type spin default 88 min 0 max 5000\n"
             << "option name SearchRFPMaxImprovingDiscount type spin default 78 min 0 max 5000\n"
-            << "option name EvalPawnValue type spin default 114 min 0 max 5000\n"
-            << "option name EvalKnightValue type spin default 308 min 0 max 5000\n"
-            << "option name EvalBishopValue type spin default 394 min 0 max 5000\n"
-            << "option name EvalRookValue type spin default 504 min 0 max 5000\n"
-            << "option name EvalQueenValue type spin default 1015 min 0 max 5000\n"
-            << "option name EvalKnightMobility type spin default 9 min -100 max 100\n"
-            << "option name EvalBishopMobility type spin default 7 min -100 max 100\n"
-            << "option name EvalRookMobility type spin default 16 min -100 max 100\n"
-            << "option name EvalQueenMobility type spin default 10 min -100 max 100\n"
-            << "option name EvalAttackingPiecesWeight type spin default 98 min 0 max 300\n"
-            << "option name EvalKnightCheckThreatPenalty type spin default 9 min 0 max 100\n"
-            << "option name EvalKnightDevelopmentBonus type spin default 9 min 0 max 50\n"
-            << "option name EvalKnightEnemyPressureBonus type spin default 4 min 0 max 50\n"
-            << "option name EvalKnightKingApproachBonus type spin default 7 min 0 max 50\n"
-            << "option name EvalKnightOutpostBonus type spin default 13 min 0 max 50\n"
+            << "option name EvalPawnValue type spin default " << defaults.pawnValue << " min 0 max 5000\n"
+            << "option name EvalKnightValue type spin default " << defaults.knightValue << " min 0 max 5000\n"
+            << "option name EvalBishopValue type spin default " << defaults.bishopValue << " min 0 max 5000\n"
+            << "option name EvalRookValue type spin default " << defaults.rookValue << " min 0 max 5000\n"
+            << "option name EvalQueenValue type spin default " << defaults.queenValue << " min 0 max 5000\n"
+            << "option name EvalKnightMobility type spin default " << defaults.knightMobility << " min -100 max 100\n"
+            << "option name EvalBishopMobility type spin default " << defaults.bishopMobility << " min -100 max 100\n"
+            << "option name EvalRookMobility type spin default " << defaults.rookMobility << " min -100 max 100\n"
+            << "option name EvalQueenMobility type spin default " << defaults.queenMobility << " min -100 max 100\n"
+            << "option name EvalAttackingPiecesWeight type spin default " << defaults.attackingPiecesWeight << " min 0 max 300\n"
+            << "option name EvalKnightCheckThreatPenalty type spin default " << defaults.knightCheckThreatPenalty << " min 0 max 100\n"
+            << "option name EvalKnightDevelopmentBonus type spin default " << defaults.knightDevelopmentBonus << " min 0 max 50\n"
+            << "option name EvalKnightEnemyPressureBonus type spin default " << defaults.knightEnemyPressureBonus << " min 0 max 50\n"
+            << "option name EvalKnightKingApproachBonus type spin default " << defaults.knightKingApproachBonus << " min 0 max 50\n"
+            << "option name EvalKnightOutpostBonus type spin default " << defaults.knightOutpostBonus << " min 0 max 50\n"
+            << "option name EvalBadBishopPenalty type spin default " << defaults.badBishopPenalty << " min 0 max 100\n"
+            << "option name EvalBishopPairBonus type spin default " << defaults.bishopPairBonus << " min 0 max 100\n"
+            << "option name EvalBishopVsKnightBonus type spin default " << defaults.bishopVsKnightBonus << " min 0 max 100\n"
+            << "option name EvalBishopColorWeaknessPenalty type spin default " << defaults.bishopColorWeaknessPenalty << " min 0 max 100\n"
+            << "option name EvalBishopFianchettoBonus type spin default " << defaults.bishopFianchettoBonus << " min 0 max 100\n"
+            << "option name EvalBishopReturningBonus type spin default " << defaults.bishopReturningBonus << " min 0 max 100\n"
             << "option name ResetTuning type button\n";
     }
 
@@ -331,7 +356,13 @@ namespace ironphoenix::Tuning {
             << " EvalKnightDevelopmentBonus=" << e.knightDevelopmentBonus
             << " EvalKnightEnemyPressureBonus=" << e.knightEnemyPressureBonus
             << " EvalKnightKingApproachBonus=" << e.knightKingApproachBonus
-            << " EvalKnightOutpostBonus=" << e.knightOutpostBonus << '\n';
+            << " EvalKnightOutpostBonus=" << e.knightOutpostBonus
+            << " EvalBadBishopPenalty=" << e.badBishopPenalty
+            << " EvalBishopPairBonus=" << e.bishopPairBonus
+            << " EvalBishopVsKnightBonus=" << e.bishopVsKnightBonus
+            << " EvalBishopColorWeaknessPenalty=" << e.bishopColorWeaknessPenalty
+            << " EvalBishopFianchettoBonus=" << e.bishopFianchettoBonus
+            << " EvalBishopReturningBonus=" << e.bishopReturningBonus << '\n';
     }
 
 } // namespace ironphoenix::Tuning

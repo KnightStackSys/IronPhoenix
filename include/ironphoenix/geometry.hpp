@@ -37,6 +37,8 @@ extern std::array<Bitboard, SQUARE_NB> KnightCheckApproach;
 // opposing non-king pieces. Reuse rather than scanning every enemy piece.
 extern std::array<Bitboard, SQUARE_NB> KnightEnemyProximity;
 extern std::array<Bitboard, SQUARE_NB> KingAttacks;
+// Team pawn chain in front of a bishop; one precomputed mask per owner and square.
+extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> BishopBadPawnMask;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks;
 extern std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers;
 extern Bitboard BoardMask;
