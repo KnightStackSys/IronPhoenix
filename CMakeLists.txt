@@ -13,6 +13,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 option(IRONPHOENIX_BUILD_TESTS "Build IronPhoenix correctness tests" ON)
 option(IRONPHOENIX_BUILD_BENCHMARK "Build IronPhoenix microbenchmark" ON)
 option(IRONPHOENIX_BUILD_DATASET_GENERATOR "Build PhoenixNet dataset generator" ON)
+option(IRONPHOENIX_NATIVE_CPU "Optimize Release/RelWithDebInfo for the build host CPU; nonportable binaries" OFF)
 
 add_library(ironphoenix_core STATIC
     src/geometry.cpp
@@ -51,6 +52,24 @@ target_include_directories(ironphoenix_core
 
 target_compile_features(ironphoenix_core PUBLIC cxx_std_20)
 target_link_libraries(ironphoenix_core PUBLIC Threads::Threads)
+
+# Only enable for a binary that will run on the same CPU generation used to
+# build it. Keep CI/distribution generic so older systems are not exposed to
+# unsupported instructions. PUBLIC propagates ISA flags to tests/apps because
+# Bitboard intrinsics are also header-inlined.
+if(IRONPHOENIX_NATIVE_CPU)
+    if(MSVC)
+        target_compile_options(ironphoenix_core PUBLIC
+            $<$<CONFIG:Release>:/arch:AVX2>
+            $<$<CONFIG:RelWithDebInfo>:/arch:AVX2>
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(ironphoenix_core PUBLIC
+            $<$<CONFIG:Release>:-march=native>
+            $<$<CONFIG:RelWithDebInfo>:-march=native>
+        )
+    endif()
+endif()
 
 if(MSVC)
     target_compile_options(ironphoenix_core PRIVATE
