@@ -30,3 +30,9 @@ Reference concepts: [Bad Bishop](https://chessprogramming.org/Bad_Bishop),
 [Color Weakness](https://chessprogramming.org/Color_Weakness),
 [Fianchetto](https://chessprogramming.org/Fianchetto),
 [Returning Bishop](https://chessprogramming.org/Returning_Bishop).
+
+## Performance optimization
+
+The tuned bishop weights are nonzero by default and can make HCE leaf nodes more expensive. The evaluator collects both teams' bishop/pawn material **once**, and reuses enemy bishop attack maps rather than recalculating them for each team. Precomputed `Geometry::BishopBadPawnMask[color][square]` bitboards turn the former per-bishop, per-pawn coordinate scan into a three-word bitboard intersection and popcount. Unit tests check all 4 × 160 × 160 bishop/pawn mask combinations. Evaluation and search scores are intended to be identical to the original implementation.
+
+NPS depends on the CPU, build mode, position, Hash, thread count, NNUE state and evaluation weights; these are **throughput optimizations, not a promise of a fixed NPS**. Compare on the same Release build and position and validate engine strength independently.

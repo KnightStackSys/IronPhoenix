@@ -351,10 +351,7 @@ namespace ironphoenix::Eval {
 
             // Team-wise complementary bishop coverage and four seat-oriented
             // pawn/king structures. All new feature weights default to zero.
-            team0 += bishopFeaturesForTeam(pos, 0);
-            team1 += bishopFeaturesForTeam(pos, 1);
-
-            const int score = team0 - team1;
+            const int score = team0 - team1 + bishopFeatureDifference(pos);
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 

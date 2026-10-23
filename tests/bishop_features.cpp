@@ -5,6 +5,8 @@
 #include "ironphoenix/tuning.hpp"
 
 #include <iostream>
+#include <algorithm>
+#include <cstdlib>
 
 using namespace ironphoenix;
 
@@ -41,6 +43,7 @@ int main() {
     expect(!NNUE::loaded(), "bishop feature tests require HCE");
     Tuning::resetEval();
     using P = Tuning::EvalParameters;
+    const P tunedDefaults{};
 
     struct Weight { const char* name; int P::*field; };
     const Weight weights[] = {
@@ -52,7 +55,8 @@ int main() {
         {"EvalBishopReturningBonus", &P::bishopReturningBonus},
     };
     for (const auto& w : weights) {
-        expect(Tuning::eval().*(w.field) == 0, "new feature is opt-in");
+        expect(Tuning::eval().*(w.field) == tunedDefaults.*(w.field),
+               "feature starts at the current SPSA-tuned default");
         expect(Tuning::setEvalParameter(w.name, 25), "UCI accepts bishop feature");
         expect(Tuning::eval().*(w.field) == 25, "value stored");
         expect(!Tuning::setEvalParameter(w.name, -1), "negative weight rejected");
@@ -61,7 +65,33 @@ int main() {
     }
     Tuning::resetEval();
     for (const auto& w : weights)
-        expect(Tuning::eval().*(w.field) == 0, "reset disables experimental feature");
+        expect(Tuning::eval().*(w.field) == tunedDefaults.*(w.field),
+               "reset restores current tuned bishop default");
+
+    // Verify that the precomputed 4PC bad-bishop masks exactly match the
+    // old pawn-loop geometry on every valid square and all four orientations.
+    for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+        const Color c = static_cast<Color>(ci);
+        for (unsigned bi = 0; bi < SQUARE_NB; ++bi) {
+            const Square bishop = static_cast<Square>(bi);
+            const int bf = Geometry::fileOf(bishop), br = Geometry::rankOf(bishop);
+            for (unsigned pi = 0; pi < SQUARE_NB; ++pi) {
+                const Square pawn = static_cast<Square>(pi);
+                const int pf = Geometry::fileOf(pawn), pr = Geometry::rankOf(pawn);
+                int ahead = 0, across = 0;
+                switch (c) {
+                case RED:    ahead = pr - br; across = pf - bf; break;
+                case BLUE:   ahead = pf - bf; across = pr - br; break;
+                case YELLOW: ahead = br - pr; across = pf - bf; break;
+                case GREEN:  ahead = bf - pf; across = pr - br; break;
+                }
+                const bool expected = ahead > 0 && ahead <= 4 && std::abs(across) <= 4
+                    && (((bf + br) & 1) == ((pf + pr) & 1));
+                expect(Geometry::BishopBadPawnMask[ci][bi].test(pawn) == expected,
+                       "precomputed bishop/pawn mask matches original geometry");
+            }
+        }
+    }
 
     {
         auto pos = kings();

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdlib>
 #include <mutex>
 
 namespace ironphoenix::Geometry {
@@ -16,6 +17,7 @@ std::array<Bitboard, SQUARE_NB> KnightAttacks{};
 std::array<Bitboard, SQUARE_NB> KnightCheckApproach{};
 std::array<Bitboard, SQUARE_NB> KnightEnemyProximity{};
 std::array<Bitboard, SQUARE_NB> KingAttacks{};
+std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> BishopBadPawnMask{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers{};
 Bitboard BoardMask{};
@@ -237,6 +239,30 @@ void initialize() {
         addPawnAttack(YELLOW, sq, +1, -1);
         addPawnAttack(GREEN,  sq, -1, -1);
         addPawnAttack(GREEN,  sq, -1, +1);
+    }
+
+    // A team's bad-bishop pawns are ahead of each bishop by up to four
+    // player-relative ranks/files, within four lateral squares, on the same
+    // checkerboard color. Precomputing the 4 * 160 masks avoids scanning
+    // every allied pawn for every bishop at each evaluation leaf.
+    for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+        const Color c = static_cast<Color>(ci);
+        for (unsigned s = 0; s < SQUARE_NB; ++s) {
+            const int bf = FileOf[s], br = RankOf[s];
+            for (unsigned p = 0; p < SQUARE_NB; ++p) {
+                const int pf = FileOf[p], pr = RankOf[p];
+                int ahead = 0, across = 0;
+                switch (c) {
+                case RED:    ahead = pr - br; across = pf - bf; break;
+                case BLUE:   ahead = pf - bf; across = pr - br; break;
+                case YELLOW: ahead = br - pr; across = pf - bf; break;
+                case GREEN:  ahead = bf - pf; across = pr - br; break;
+                }
+                if (ahead > 0 && ahead <= 4 && std::abs(across) <= 4
+                    && ((bf + br + pf + pr) & 1) == 0)
+                    BishopBadPawnMask[ci][s].set(static_cast<Square>(p));
+            }
+        }
     }
 
     // A knight can check a king on 'king' by landing on any square in
