@@ -73,6 +73,7 @@ namespace ironphoenix {
         // Exposed only to the mate-stop regression test.
         friend struct MateStopTestAccess;
         friend struct ReverseFutilityTestAccess;
+        friend struct CheckOrderTestAccess;
         [[nodiscard]] bool reverseFutilitySafe(Position& pos) const;
 
         struct TimeBudget final {

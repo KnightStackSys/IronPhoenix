@@ -31,6 +31,9 @@ namespace ironphoenix {
             int rfpMarginPerDepth = 141;
             int rfpMinMargin = 93;
             int rfpMaxImprovingDiscount = 82;
+            // 1 = cheaply reject geometrically impossible quiet checks.
+            // 0 = original full givesCheck() for A/B benchmarking.
+            int fastCheckPrefilter = 1;
         };
 
         struct EvalParameters final {

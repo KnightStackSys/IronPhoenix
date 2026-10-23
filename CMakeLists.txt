@@ -219,6 +219,12 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
 
+    add_executable(ironphoenix_check_order tests/check_order.cpp)
+    target_link_libraries(ironphoenix_check_order PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_check_order PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_check_order COMMAND ironphoenix_check_order)
+    set_target_properties(ironphoenix_check_order PROPERTIES FOLDER "Tests")
+
     add_executable(ironphoenix_king_features tests/king_features.cpp)
     target_link_libraries(ironphoenix_king_features PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_king_features PRIVATE cxx_std_20)

@@ -100,6 +100,7 @@ int main(int argc, char** argv) {
     // Compare feature groups on the same runner and search position. Never
     // treat absolute CI NPS as cross-machine evidence; compare relative changes.
     const auto original = Tuning::eval();
+    const auto originalSearch = Tuning::search();
     auto measure = [&](const char* label) {
         auto probe = std::make_unique<SearchEngine>();
         SearchLimits probeLimits{};
@@ -148,8 +149,12 @@ int main(int argc, char** argv) {
     Tuning::eval().kingCastlingRightsBonus = 0;
     const bool noKingDone = measure("all-new-king-features-disabled");
     Tuning::eval() = original;
+    Tuning::search().fastCheckPrefilter = 0;
+    const bool originalOrderingDone = measure("fast-check-prefilter-disabled");
+    Tuning::search() = originalSearch;
 
     // This is a diagnostic, not an NPS threshold test. CI runner CPU differs
     // from local hardware, and iteration counters may be below node budget.
-    return (finished && pinsDone && pawnsDone && threatDone && noKingDone) ? 0 : 1;
+    return (finished && pinsDone && pawnsDone && threatDone
+        && noKingDone && originalOrderingDone) ? 0 : 1;
 }
