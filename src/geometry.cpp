@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdlib>
 #include <mutex>
 
 namespace ironphoenix::Geometry {
@@ -13,7 +14,10 @@ std::array<std::uint8_t, SQUARE_NB> RankOf{};
 std::array<std::array<Square, 8>, SQUARE_NB> Step{};
 std::array<std::array<Bitboard, SQUARE_NB>, 8> Ray{};
 std::array<Bitboard, SQUARE_NB> KnightAttacks{};
+std::array<Bitboard, SQUARE_NB> KnightCheckApproach{};
+std::array<Bitboard, SQUARE_NB> KnightEnemyProximity{};
 std::array<Bitboard, SQUARE_NB> KingAttacks{};
+std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> BishopBadPawnMask{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttacks{};
 std::array<std::array<Bitboard, SQUARE_NB>, COLOR_NB> PawnAttackers{};
 Bitboard BoardMask{};
@@ -235,6 +239,57 @@ void initialize() {
         addPawnAttack(YELLOW, sq, +1, -1);
         addPawnAttack(GREEN,  sq, -1, -1);
         addPawnAttack(GREEN,  sq, -1, +1);
+    }
+
+    // A team's bad-bishop pawns are ahead of each bishop by up to four
+    // player-relative ranks/files, within four lateral squares, on the same
+    // checkerboard color. Precomputing the 4 * 160 masks avoids scanning
+    // every allied pawn for every bishop at each evaluation leaf.
+    for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+        const Color c = static_cast<Color>(ci);
+        for (unsigned s = 0; s < SQUARE_NB; ++s) {
+            const int bf = FileOf[s], br = RankOf[s];
+            for (unsigned p = 0; p < SQUARE_NB; ++p) {
+                const int pf = FileOf[p], pr = RankOf[p];
+                int ahead = 0, across = 0;
+                switch (c) {
+                case RED:    ahead = pr - br; across = pf - bf; break;
+                case BLUE:   ahead = pf - bf; across = pr - br; break;
+                case YELLOW: ahead = br - pr; across = pf - bf; break;
+                case GREEN:  ahead = bf - pf; across = pr - br; break;
+                }
+                if (ahead > 0 && ahead <= 4 && std::abs(across) <= 4
+                    && ((bf + br + pf + pr) & 1) == 0)
+                    BishopBadPawnMask[ci][s].set(static_cast<Square>(p));
+            }
+        }
+    }
+
+    // A knight can check a king on 'king' by landing on any square in
+    // KnightAttacks[king]. Precompute possible KNIGHT START squares for
+    // that next move; evaluation filters blocked landing squares at runtime.
+    for (unsigned s = 0; s < SQUARE_NB; ++s) {
+        Bitboard checkingSquares = KnightAttacks[s];
+        while (checkingSquares)
+            KnightCheckApproach[s] |= KnightAttacks[popLsb(checkingSquares)];
+    }
+
+    // Cache two-square Chebyshev neighborhoods for activity against enemy
+    // non-king pieces. Board holes are naturally omitted via validXY().
+    for (unsigned s = 0; s < SQUARE_NB; ++s) {
+        const int file = FileOf[s];
+        const int rank = RankOf[s];
+        for (int df = -2; df <= 2; ++df) {
+            for (int dr = -2; dr <= 2; ++dr) {
+                if (df == 0 && dr == 0)
+                    continue;
+                const int nf = file + df;
+                const int nr = rank + dr;
+                if (validXY(nf, nr))
+                    KnightEnemyProximity[s].set(
+                        SquareFromXY[static_cast<unsigned>(nf)][static_cast<unsigned>(nr)]);
+            }
+        }
     }
 
     initializeLineTables();

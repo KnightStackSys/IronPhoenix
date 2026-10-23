@@ -38,6 +38,7 @@ void SearchEngine::startMultiPV(
 
     stopAndWait();
     stopRequested_.store(false, std::memory_order_relaxed);
+    ponderHitRequested_.store(false, std::memory_order_relaxed);
     searching_.store(true, std::memory_order_relaxed);
     tt_.newGeneration();
 
@@ -101,7 +102,12 @@ void SearchEngine::emitMultiPVInfo(
 
 void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out) {
     startTime_ = std::chrono::steady_clock::now();
-    timeBudgetMs_ = calculateTimeBudget(position, limits_);
+    budgetStartTime_ = startTime_;
+    const TimeBudget timeBudget = calculateTimeBudget(position, limits_);
+    minimumTimeBudgetMs_ = timeBudget.minimumMs;
+    softTimeBudgetMs_ = timeBudget.softMs;
+    hardTimeBudgetMs_ = timeBudget.hardMs;
+    pondering_ = limits_.ponder;
     nodes_ = 0;
     nextTimeCheckNode_ = 0;
     selDepth_ = 0;
@@ -109,13 +115,13 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
     for (auto& row : pv_)
         row.fill(Move{});
     pvLength_.fill(0);
-    searchStack_.fill(HistoryContext{});
+    searchStack_.fill(SearchStackEntry{});
 
     MoveList rootLegal;
     generateLegalMoves(position, rootLegal);
 
     if (rootLegal.size == 0) {
-        emitBestMove(out, Move{});
+        emitBestMove(out, Move{}, Move{});
         return;
     }
 
@@ -128,6 +134,11 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
         : 0;
 
     Move bestMove = rootLegal.moves[0];
+    Move bestPonderMove{};
+    Move previousBestMove{};
+    int previousBestScore = 0;
+    bool havePreviousIteration = false;
+    int stableBestDepths = 0;
     std::vector<RootLine> lastComplete;
     int depth = 1;
 
@@ -136,6 +147,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
             break;
 
         if (!limits_.infinite
+            && !limits_.ponder
             && requestedDepth == 0
             && limits_.nodes == 0
             && limits_.movetimeMs == 0
@@ -152,6 +164,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
         }
 
         selDepth_ = 0;
+        searchStack_[0].beginNode(position.sideToMove(), depth, true);
         std::vector<RootLine> current;
         current.reserve(rootLegal.size);
         bool completedDepth = true;
@@ -161,6 +174,8 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
                 completedDepth = false;
                 break;
             }
+            searchStack_[0].currentMove = move;
+            ++searchStack_[0].moveCount;
 
             RootLine line;
             line.move = move;
@@ -182,7 +197,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
                     continue;
                 }
 
-                searchStack_[1] = HistoryContext{
+                searchStack_[1].history = HistoryContext{
                     move,
                     position.pieceAt(move.to()),
                     mover
@@ -230,6 +245,24 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
 
         lastComplete = current;
         bestMove = lastComplete.front().move;
+        bestPonderMove = lastComplete.front().pvLength > 1
+            ? lastComplete.front().pv[1]
+            : Move{};
+
+        const bool bestMoveChanged = havePreviousIteration && bestMove != previousBestMove;
+        if (havePreviousIteration && !bestMoveChanged)
+            ++stableBestDepths;
+        else
+            stableBestDepths = 0;
+
+        const int bestScore = lastComplete.front().score;
+        const int scoreDelta = havePreviousIteration
+            ? std::max(previousBestScore - bestScore, bestScore - previousBestScore)
+            : 0;
+
+        previousBestMove = bestMove;
+        previousBestScore = bestScore;
+        havePreviousIteration = true;
 
         const int lineCount = std::min<int>(requestedLines, static_cast<int>(lastComplete.size()));
         for (int i = 0; i < lineCount; ++i) {
@@ -244,11 +277,16 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
             );
         }
 
+        // MultiPV must complete and report every requested line at this depth
+        // before exiting on a winning mate in the top-ranked line.
+        if (shouldStopOnWinningMate(bestScore, bestMove))
+            break;
+
         if (requestedDepth > 0 && depth == requestedDepth)
             break;
         if (limits_.nodes > 0 && nodes_ >= limits_.nodes)
             break;
-        if (timeBudgetMs_ > 0 && elapsedMs() >= timeBudgetMs_)
+        if (iterationTimeExpired(stableBestDepths, bestMoveChanged, scoreDelta))
             break;
 
         if (depth < MAX_PLY - 1)
@@ -257,7 +295,7 @@ void SearchEngine::runMultiPV(Position position, int multiPV, std::ostream& out)
             break;
     }
 
-    emitBestMove(out, bestMove);
+    emitBestMove(out, bestMove, bestPonderMove);
 }
 
 } // namespace ironphoenix

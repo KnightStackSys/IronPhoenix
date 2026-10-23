@@ -23,6 +23,7 @@ add_library(ironphoenix_core STATIC
     src/lmr.cpp
     src/tt.cpp
     src/eval.cpp
+    src/bishop_eval.cpp
     src/nnue.cpp
     src/tuning.cpp
     src/search.cpp
@@ -32,6 +33,9 @@ add_library(ironphoenix_core STATIC
     src/preft.cpp
     src/uci.cpp
     include/ironphoenix/eval.hpp
+    include/ironphoenix/bishop_eval.hpp
+    include/ironphoenix/iir.hpp
+    include/ironphoenix/search_stack.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
     include/ironphoenix/tuning.hpp
@@ -175,7 +179,53 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_compile_features(ironphoenix_property PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_property COMMAND ironphoenix_property)
 
-    set_target_properties(ironphoenix_smoke ironphoenix_property PROPERTIES
+    add_executable(ironphoenix_search_stack tests/search_stack.cpp)
+    target_link_libraries(ironphoenix_search_stack PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_search_stack PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_search_stack COMMAND ironphoenix_search_stack)
+
+    add_executable(ironphoenix_mate_stop tests/mate_stop.cpp)
+    target_link_libraries(ironphoenix_mate_stop PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_mate_stop PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_mate_stop COMMAND ironphoenix_mate_stop)
+
+    add_executable(ironphoenix_reverse_futility tests/reverse_futility.cpp)
+    target_link_libraries(ironphoenix_reverse_futility PRIVATE IronPhoenix::Core)
+    add_test(NAME ironphoenix_reverse_futility COMMAND ironphoenix_reverse_futility)
+
+    add_executable(ironphoenix_attacking_pieces tests/attacking_pieces.cpp)
+    target_link_libraries(ironphoenix_attacking_pieces PRIVATE IronPhoenix::Core)
+    add_test(NAME ironphoenix_attacking_pieces COMMAND ironphoenix_attacking_pieces)
+
+    add_executable(ironphoenix_knight_check_threat tests/knight_check_threat.cpp)
+    target_link_libraries(ironphoenix_knight_check_threat PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_knight_check_threat PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_knight_check_threat COMMAND ironphoenix_knight_check_threat)
+
+    add_executable(ironphoenix_knight_activity tests/knight_activity.cpp)
+    target_link_libraries(ironphoenix_knight_activity PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_knight_activity PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_knight_activity COMMAND ironphoenix_knight_activity)
+
+    add_executable(ironphoenix_knight_outpost tests/knight_outpost.cpp)
+    target_link_libraries(ironphoenix_knight_outpost PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
+
+    add_executable(ironphoenix_iir tests/iir.cpp)
+    target_link_libraries(ironphoenix_iir PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_iir PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_iir COMMAND ironphoenix_iir)
+    set_target_properties(ironphoenix_iir PROPERTIES FOLDER "Tests")
+
+    add_executable(ironphoenix_bishop_features tests/bishop_features.cpp)
+    target_link_libraries(ironphoenix_bishop_features PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_bishop_features PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_bishop_features COMMAND ironphoenix_bishop_features)
+
+    set_target_properties(ironphoenix_bishop_features PROPERTIES FOLDER "Tests")
+
+    set_target_properties(ironphoenix_smoke ironphoenix_property ironphoenix_search_stack ironphoenix_mate_stop ironphoenix_reverse_futility ironphoenix_attacking_pieces ironphoenix_knight_check_threat ironphoenix_knight_activity ironphoenix_knight_outpost PROPERTIES
         FOLDER "Tests"
     )
 endif()
@@ -185,4 +235,9 @@ if(IRONPHOENIX_BUILD_BENCHMARK)
     target_link_libraries(ironphoenix_bench PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_bench PRIVATE cxx_std_20)
     set_target_properties(ironphoenix_bench PROPERTIES FOLDER "Benchmarks")
+
+    add_executable(ironphoenix_nps_bench tests/nps_bench.cpp)
+    target_link_libraries(ironphoenix_nps_bench PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_nps_bench PRIVATE cxx_std_20)
+    set_target_properties(ironphoenix_nps_bench PROPERTIES FOLDER "Benchmarks")
 endif()

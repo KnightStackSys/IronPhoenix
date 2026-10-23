@@ -1,6 +1,10 @@
-# 🔥 IronPhoenix Code of Conduct
+<a id="-ironphoenix-code-of-conduct"></a>
 
-## 🛡️ Our Commitment
+# <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flame.svg" alt="" width="20" height="20"> IronPhoenix Code of Conduct
+
+<a id="-our-commitment"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/shield-check.svg" alt="" width="20" height="20"> Our Commitment
 
 IronPhoenix is an open-source project focused on building and improving a high-performance four-player chess engine.
 
@@ -10,7 +14,9 @@ This Code of Conduct applies to contributors, maintainers, reviewers, testers, u
 
 ---
 
-## 🤝 Expected Behavior
+<a id="-expected-behavior"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/handshake.svg" alt="" width="20" height="20"> Expected Behavior
 
 Participants are expected to:
 
@@ -27,7 +33,9 @@ Participants are expected to:
 
 ---
 
-## 🚫 Unacceptable Behavior
+<a id="-unacceptable-behavior"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/ban.svg" alt="" width="20" height="20"> Unacceptable Behavior
 
 The following behavior is not acceptable:
 
@@ -47,7 +55,9 @@ Strong disagreement about engine design, pruning techniques, evaluation, move or
 
 ---
 
-## 🧪 Technical Discussions and Engine Testing
+<a id="-technical-discussions-and-engine-testing"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flask-conical.svg" alt="" width="20" height="20"> Technical Discussions and Engine Testing
 
 IronPhoenix development depends heavily on experimentation and strength testing.
 
@@ -65,7 +75,9 @@ A failed experiment is not a failed contribution. Good testing that shows an ide
 
 ---
 
-## 🧑‍💻 Pull Requests and Code Review
+<a id="-pull-requests-and-code-review"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/git-pull-request.svg" alt="" width="20" height="20"> Pull Requests and Code Review
 
 When opening or reviewing a pull request:
 
@@ -81,7 +93,9 @@ Maintainers may request that experimental engine-strength changes remain on sepa
 
 ---
 
-## 🌐 Scope
+<a id="-scope"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/globe.svg" alt="" width="20" height="20"> Scope
 
 This Code of Conduct applies in official IronPhoenix project spaces, including:
 
@@ -97,7 +111,9 @@ It may also apply when someone is publicly representing the IronPhoenix project.
 
 ---
 
-## 🚨 Reporting a Problem
+<a id="-reporting-a-problem"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/triangle-alert.svg" alt="" width="20" height="20"> Reporting a Problem
 
 If you experience or witness behavior that violates this Code of Conduct, report it to the IronPhoenix repository owner or project maintainers through an appropriate private GitHub contact method when possible.
 
@@ -115,7 +131,9 @@ Do not knowingly submit false or retaliatory reports.
 
 ---
 
-## ⚖️ Enforcement
+<a id="-enforcement"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/scale.svg" alt="" width="20" height="20"> Enforcement
 
 Project maintainers are responsible for interpreting and enforcing this Code of Conduct.
 
@@ -132,7 +150,9 @@ Enforcement decisions should be based on protecting the project community and ma
 
 ---
 
-## 🧭 Maintainer Responsibilities
+<a id="-maintainer-responsibilities"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/compass.svg" alt="" width="20" height="20"> Maintainer Responsibilities
 
 Maintainers are expected to:
 
@@ -145,7 +165,9 @@ Maintainers are expected to:
 
 ---
 
-## 🔥 Project Values
+<a id="-project-values"></a>
+
+## <img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/flame.svg" alt="" width="20" height="20"> Project Values
 
 IronPhoenix values:
 
@@ -153,4 +175,4 @@ IronPhoenix values:
 
 We can disagree aggressively about algorithms while still treating each other well.
 
-♟️ **Build strong code. Test it honestly. Help the engine improve.**
+<img src="https://cdn.jsdelivr.net/npm/lucide-static@latest/icons/crown.svg" alt="" width="20" height="20"> **Build strong code. Test it honestly. Help the engine improve.**

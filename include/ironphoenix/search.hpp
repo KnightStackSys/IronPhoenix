@@ -1,6 +1,7 @@
 #pragma once
 
 #include "history.hpp"
+#include "search_stack.hpp"
 #include "position.hpp"
 #include "tt.hpp"
 
@@ -26,6 +27,9 @@ namespace ironphoenix {
         std::uint64_t nodes = 0;
         std::int64_t movetimeMs = 0;
         bool infinite = false;
+        bool ponder = false;
+        bool ponderEnabled = false;
+        std::int64_t moveOverheadMs = 50;
 
         bool hasClock = false;
         std::array<std::int64_t, COLOR_NB> timeMs{};
@@ -51,6 +55,7 @@ namespace ironphoenix {
 
         void stop() noexcept;
         void stopAndWait() noexcept;
+        void ponderHit() noexcept;
 
         [[nodiscard]] bool searching() const noexcept { return searching_.load(std::memory_order_relaxed); }
 
@@ -60,6 +65,17 @@ namespace ironphoenix {
         void newGame() noexcept;
 
     private:
+        // Exposed only to the mate-stop regression test.
+        friend struct MateStopTestAccess;
+        friend struct ReverseFutilityTestAccess;
+        [[nodiscard]] bool reverseFutilitySafe(Position& pos) const;
+
+        struct TimeBudget final {
+            std::int64_t minimumMs = 0;
+            std::int64_t softMs = 0;
+            std::int64_t hardMs = 0;
+        };
+
         static constexpr int MAX_PLY = 128;
         static constexpr int INF = 32000;
         static constexpr int MATE_SCORE = 30000;
@@ -71,28 +87,33 @@ namespace ironphoenix {
         std::thread worker_;
         std::atomic<bool> stopRequested_{ false };
         std::atomic<bool> searching_{ false };
+        std::atomic<bool> ponderHitRequested_{ false };
 
         SearchLimits limits_{};
         std::chrono::steady_clock::time_point startTime_{};
-        std::int64_t timeBudgetMs_ = 0;
+        std::chrono::steady_clock::time_point budgetStartTime_{};
+        std::int64_t minimumTimeBudgetMs_ = 0;
+        std::int64_t softTimeBudgetMs_ = 0;
+        std::int64_t hardTimeBudgetMs_ = 0;
+        bool pondering_ = false;
         std::uint64_t nodes_ = 0;
         std::uint64_t nextTimeCheckNode_ = 0;
         int selDepth_ = 0;
 
         std::array<std::array<Move, MAX_PLY>, MAX_PLY> pv_{};
         std::array<int, MAX_PLY> pvLength_{};
-        std::array<HistoryContext, MAX_PLY> searchStack_{};
+        std::array<SearchStackEntry, MAX_PLY> searchStack_{};
         mutable std::mutex outputMutex_;
 
         void run(Position position, std::ostream& out);
         void runMultiPV(Position position, int multiPV, std::ostream& out);
 
-        // cutNode marks a non-PV node expected to fail high. allNode is derived
-        // inside negamax as the complementary non-PV node type.
+        // Expected cut/all node type propagated through PVS.
         int negamax(Position& pos, int depth, int alpha, int beta, int ply,
-            bool pvNode, bool allowNull = true, bool cutNode = false);
+                    bool pvNode, bool allowNull = true, bool cutNode = false);
         int qsearch(Position& pos, int alpha, int beta, int ply, bool pvNode);
         int evaluate(const Position& pos) const noexcept;
+        void recordStackEvaluation(int ply, int score) noexcept;
         int moveScore(const Position& pos, Move move, Move ttMove, int ply, bool givesCheck) const noexcept;
         void orderMoves(const Position& pos,
                         Move* begin,
@@ -111,8 +132,12 @@ namespace ironphoenix {
             const Position& pos) noexcept;
 
         [[nodiscard]] bool shouldStop() noexcept;
+        [[nodiscard]] bool iterationTimeExpired(int stableDepths, bool bestMoveChanged, int scoreDelta) noexcept;
+        [[nodiscard]] bool shouldStopOnWinningMate(int score, Move rootMove) const noexcept;
+        void processPonderHit() noexcept;
         [[nodiscard]] std::int64_t elapsedMs() const noexcept;
-        [[nodiscard]] std::int64_t calculateTimeBudget(const Position& pos, const SearchLimits& limits) const noexcept;
+        [[nodiscard]] std::int64_t budgetElapsedMs() const noexcept;
+        [[nodiscard]] TimeBudget calculateTimeBudget(const Position& pos, const SearchLimits& limits) const noexcept;
 
         void emitInfo(
             std::ostream& out,
@@ -132,7 +157,7 @@ namespace ironphoenix {
             int pvLength
         );
 
-        void emitBestMove(std::ostream& out, Move move);
+        void emitBestMove(std::ostream& out, Move move, Move ponderMove = Move{});
     };
 
 }

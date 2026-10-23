@@ -27,10 +27,12 @@ jobs:
           - name: 🐧 Linux GCC
             os: ubuntu-latest
             configure_args: -DCMAKE_BUILD_TYPE=Release
+            binary: build/ironphoenix
 
           - name: 🪟 Windows MSVC
             os: windows-latest
             configure_args: -A x64
+            binary: build/Release/ironphoenix.exe
 
     steps:
       - name: 📥 Checkout
@@ -48,6 +50,14 @@ jobs:
 
       - name: 🧪 Run tests
         run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: ⚡ Report search NPS (diagnostic only)
+        run: ${{ runner.os == 'Windows' && './build/Release/ironphoenix_nps_bench.exe' || './build/ironphoenix_nps_bench' }}
+
+      - name: 🖥️ Web GUI integration against compiled engine
+        env:
+          IRONPHOENIX_NATIVE_ENGINE: ${{ matrix.binary }}
+        run: node --test web/tests/native-engine.test.js
 
       - name: 🧠 Validate PhoenixNet Python
         if: ${{ hashFiles('nnue/*.py') != '' }}
