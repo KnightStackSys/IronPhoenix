@@ -31,52 +31,44 @@ namespace ironphoenix {
             int rfpMarginPerDepth = 141;
             int rfpMinMargin = 93;
             int rfpMaxImprovingDiscount = 82;
-            // 1 = cheaply reject geometrically impossible quiet checks.
-            // 0 = original full givesCheck() for A/B benchmarking.
             int fastCheckPrefilter = 1;
-            // Exact full-evaluation cache, private to each search worker.
-            // Set 0 to disable for NPS/SPRT comparisons.
             int evalCacheEnabled = 1;
-            // Geometrically skip redundant inCheck(mover) after safe moves.
-            // 0 forces original full move-by-move legality verification.
             int fastKingLegality = 1;
-            // Exact union of pawn attack maps, cached per worker.
             int pawnAttackCache = 1;
-            // Skip impossible slider rays in HCE pins/X-ray scoring.
             int kingRayPrefilter = 1;
         };
 
         struct EvalParameters final {
-            int pawnValue = 106;
-            int knightValue = 303;
-            int bishopValue = 455;
-            int rookValue = 466;
-            int queenValue = 1047;
-            int knightMobility = 14;
-            int bishopMobility = 5;
-            int rookMobility = 16;
-            int queenMobility = 6;
+            int pawnValue = 118;
+            int knightValue = 247;
+            int bishopValue = 408;
+            int rookValue = 440;
+            int queenValue = 1111;
+            int knightMobility = 12;
+            int bishopMobility = 8;
+            int rookMobility = 17;
+            int queenMobility = 11;
             int attackingPiecesWeight = 120;
-            int knightCheckThreatPenalty = 5;
-            int knightDevelopmentBonus = 17;
-            int knightEnemyPressureBonus = 18;
-            int knightKingApproachBonus = 5;
-            int knightOutpostBonus = 2;
+            int knightCheckThreatPenalty = 28;
+            int knightDevelopmentBonus = 35;
+            int knightEnemyPressureBonus = 43;
+            int knightKingApproachBonus = 20;
+            int knightOutpostBonus = 6;
             int badBishopPenalty = 1;
-            int bishopPairBonus = 51;
-            int bishopVsKnightBonus = 36;
+            int bishopPairBonus = 34;
+            int bishopVsKnightBonus = 30;
             int bishopColorWeaknessPenalty = 3;
-            int bishopFianchettoBonus = 5;
-            int bishopReturningBonus = 22;
-            int kingShieldPenalty = 10;
-            int kingZoneAttackPenalty = 6;
-            int kingPawnStormPenalty = 5;
-            int kingMateThreatPenalty = 30;
-            int kingCentralizationBonus = 4;
-            int kingPawnlessWingPenalty = 14;
-            int kingPinPenalty = 14;
-            int kingXrayPenalty = 8;
-            int kingCastlingRightsBonus = 8;
+            int bishopFianchettoBonus = 31;
+            int bishopReturningBonus = 1;
+            int kingShieldPenalty = 6;
+            int kingZoneAttackPenalty = 45;
+            int kingPawnStormPenalty = 12;
+            int kingMateThreatPenalty = 106;
+            int kingCentralizationBonus = 2;
+            int kingPawnlessWingPenalty = 13;
+            int kingPinPenalty = 1;
+            int kingXrayPenalty = 39;
+            int kingCastlingRightsBonus = 10;
         };
 
         [[nodiscard]] SearchParameters& search() noexcept;

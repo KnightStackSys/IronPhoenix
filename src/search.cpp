@@ -1078,7 +1078,7 @@ namespace ironphoenix {
             const bool canPruneMove = !pvNode && !inCheckNode
                 && move != ttMove && !moveMateWindow;
             const bool lmpCandidate = canPruneMove && quiet
-                && legalMoves >= 3 + depth * depth
+                && legalMoves >= (3 + depth * depth) / (2 - ss.improving)
                 && lmrHistoryScore < tuning.lmpHistoryThreshold;
             const bool hmpCandidate = canPruneMove && quiet
                 && depth <= tuning.hmpMaxDepth
@@ -1136,9 +1136,17 @@ namespace ironphoenix {
 
                         if (lmrEligible) {
                             reduction = lmrBaseReduction(depth, legalMoves);
+                            
+							// If the current node is improving relative to a same-team ancestor,
+                            // reduce the LMR reduction by 1 ply. This allows the search to explore
+                            // more deeply in positions that are showing promise, while still applying
+                            // LMR to less promising lines.
+                            reduction += !ss.improving;
 
-                            // Reduction adjustments go here!
-
+							// If this is a PV node, reduce the LMR reduction by 1 ply. This allows the
+                            // search to explore more deeply in the principal variation, while still applying
+                            // LMR to less promising lines.
+                            reduction -= pvNode;
                             reduction = std::clamp(reduction, 0, depth - 2);
                         }
 
