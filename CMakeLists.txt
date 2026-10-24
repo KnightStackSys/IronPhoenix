@@ -13,6 +13,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 option(IRONPHOENIX_BUILD_TESTS "Build IronPhoenix correctness tests" ON)
 option(IRONPHOENIX_BUILD_BENCHMARK "Build IronPhoenix microbenchmark" ON)
 option(IRONPHOENIX_BUILD_DATASET_GENERATOR "Build PhoenixNet dataset generator" ON)
+option(IRONPHOENIX_NATIVE_CPU "Optimize Release/RelWithDebInfo for the build host CPU; nonportable binaries" OFF)
 
 add_library(ironphoenix_core STATIC
     src/geometry.cpp
@@ -24,6 +25,7 @@ add_library(ironphoenix_core STATIC
     src/tt.cpp
     src/eval.cpp
     src/bishop_eval.cpp
+    src/king_eval.cpp
     src/nnue.cpp
     src/tuning.cpp
     src/search.cpp
@@ -34,10 +36,12 @@ add_library(ironphoenix_core STATIC
     src/uci.cpp
     include/ironphoenix/eval.hpp
     include/ironphoenix/bishop_eval.hpp
+    include/ironphoenix/king_eval.hpp
     include/ironphoenix/search_stack.hpp
     include/ironphoenix/lmr.hpp
     include/ironphoenix/nnue.hpp
     include/ironphoenix/tuning.hpp
+    include/ironphoenix/king_legality.hpp
 )
 
 add_library(IronPhoenix::Core ALIAS ironphoenix_core)
@@ -49,6 +53,24 @@ target_include_directories(ironphoenix_core
 
 target_compile_features(ironphoenix_core PUBLIC cxx_std_20)
 target_link_libraries(ironphoenix_core PUBLIC Threads::Threads)
+
+# Only enable for a binary that will run on the same CPU generation used to
+# build it. Keep CI/distribution generic so older systems are not exposed to
+# unsupported instructions. PUBLIC propagates ISA flags to tests/apps because
+# Bitboard intrinsics are also header-inlined.
+if(IRONPHOENIX_NATIVE_CPU)
+    if(MSVC)
+        target_compile_options(ironphoenix_core PUBLIC
+            $<$<CONFIG:Release>:/arch:AVX2>
+            $<$<CONFIG:RelWithDebInfo>:/arch:AVX2>
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        target_compile_options(ironphoenix_core PUBLIC
+            $<$<CONFIG:Release>:-march=native>
+            $<$<CONFIG:RelWithDebInfo>:-march=native>
+        )
+    endif()
+endif()
 
 if(MSVC)
     target_compile_options(ironphoenix_core PRIVATE
@@ -216,6 +238,36 @@ if(IRONPHOENIX_BUILD_TESTS)
     target_link_libraries(ironphoenix_knight_outpost PRIVATE IronPhoenix::Core)
     target_compile_features(ironphoenix_knight_outpost PRIVATE cxx_std_20)
     add_test(NAME ironphoenix_knight_outpost COMMAND ironphoenix_knight_outpost)
+
+    add_executable(ironphoenix_check_order tests/check_order.cpp)
+    target_link_libraries(ironphoenix_check_order PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_check_order PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_check_order COMMAND ironphoenix_check_order)
+    set_target_properties(ironphoenix_check_order PROPERTIES FOLDER "Tests")
+
+    add_executable(ironphoenix_pawn_cache tests/pawn_cache.cpp)
+    target_link_libraries(ironphoenix_pawn_cache PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_pawn_cache PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_pawn_cache COMMAND ironphoenix_pawn_cache)
+    set_target_properties(ironphoenix_pawn_cache PROPERTIES FOLDER "Tests")
+
+    add_executable(ironphoenix_king_legality tests/king_legality.cpp)
+    target_link_libraries(ironphoenix_king_legality PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_king_legality PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_king_legality COMMAND ironphoenix_king_legality)
+    set_target_properties(ironphoenix_king_legality PROPERTIES FOLDER "Tests")
+
+    add_executable(ironphoenix_eval_cache tests/eval_cache.cpp)
+    target_link_libraries(ironphoenix_eval_cache PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_eval_cache PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_eval_cache COMMAND ironphoenix_eval_cache)
+    set_target_properties(ironphoenix_eval_cache PROPERTIES FOLDER "Tests")
+
+    add_executable(ironphoenix_king_features tests/king_features.cpp)
+    target_link_libraries(ironphoenix_king_features PRIVATE IronPhoenix::Core)
+    target_compile_features(ironphoenix_king_features PRIVATE cxx_std_20)
+    add_test(NAME ironphoenix_king_features COMMAND ironphoenix_king_features)
+    set_target_properties(ironphoenix_king_features PROPERTIES FOLDER "Tests")
 
     add_executable(ironphoenix_bishop_features tests/bishop_features.cpp)
     target_link_libraries(ironphoenix_bishop_features PRIVATE IronPhoenix::Core)

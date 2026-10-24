@@ -2,6 +2,7 @@
 
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/lmr.hpp"
+#include "ironphoenix/king_legality.hpp"
 #include "ironphoenix/tuning.hpp"
 
 #include "ironphoenix/movegen.hpp"
@@ -9,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <memory>
 #include <ostream>
 #include <sstream>
@@ -43,6 +45,66 @@ namespace ironphoenix {
                 | pos.pieces(c, ROOK)
                 | pos.pieces(c, QUEEN);
             return static_cast<bool>(pieces);
+        }
+
+        // Conservative cheap prefilter for expensive quiet-move givesCheck().
+        // Only return false if neither enemy king can be checked by the moved
+        // piece nor unmasked by vacating the source square. Special moves and
+        // pre-existing checks are handled by the caller with full givesCheck().
+        IRONPHOENIX_FORCE_INLINE bool quietMayGiveCheck(
+            const Position& pos, Move move) noexcept {
+            const Piece moving = pos.pieceAt(move.from());
+            if (!moving)
+                return true;
+            const Color us = colorOf(moving);
+            const PieceType type = typeOf(moving);
+            const Square from = move.from(), to = move.to();
+            const int fromF = Geometry::fileOf(from), fromR = Geometry::rankOf(from);
+            const int toF = Geometry::fileOf(to), toR = Geometry::rankOf(to);
+            for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                const Color opponent = static_cast<Color>(ci);
+                if (!enemy(us, opponent) || !pos.isAlive(opponent))
+                    continue;
+                const Square king = pos.kingSquare(opponent);
+                if (king == SQ_NONE)
+                    continue;
+                const int kf = Geometry::fileOf(king), kr = Geometry::rankOf(king);
+                const int fdx = fromF - kf, fdy = fromR - kr;
+                // Uncovering a friendly slider check requires vacating a
+                // square collinear with its target king.
+                if (!fdx || !fdy || std::abs(fdx) == std::abs(fdy))
+                    return true;
+
+                const int dx = toF - kf, dy = toR - kr;
+                const bool orthogonal = !dx || !dy;
+                const bool diagonal = std::abs(dx) == std::abs(dy);
+                switch (type) {
+                case PAWN:
+                    if (Geometry::PawnAttacks[us][to].test(king))
+                        return true;
+                    break;
+                case KNIGHT:
+                    if (Geometry::KnightAttacks[to].test(king))
+                        return true;
+                    break;
+                case BISHOP:
+                    if (diagonal) return true;
+                    break;
+                case ROOK:
+                    if (orthogonal) return true;
+                    break;
+                case QUEEN:
+                    if (orthogonal || diagonal) return true;
+                    break;
+                case KING:
+                    if (Geometry::KingAttacks[to].test(king))
+                        return true;
+                    break;
+                default:
+                    return true;
+                }
+            }
+            return false;
         }
 
         IRONPHOENIX_FORCE_INLINE int captureOrderingScore(Piece movingPiece, Move move) noexcept {
@@ -90,6 +152,14 @@ namespace ironphoenix {
 
     void SearchEngine::start(Position position, SearchLimits limits, std::ostream& out) {
         stopAndWait();
+        // One search always sees one set of tuning weights; do not reuse HCE
+        // entries across successive searches or engine option changes.
+        if (++evalCacheEpoch_ == 0) {
+            evalCacheEpoch_ = 1;
+            evalCache_.fill(EvalCacheEntry{});
+        }
+        evalCacheHits_ = 0;
+        evalCacheActive_ = true;
         stopRequested_.store(false, std::memory_order_relaxed);
         ponderHitRequested_.store(false, std::memory_order_relaxed);
         searching_.store(true, std::memory_order_relaxed);
@@ -384,7 +454,21 @@ namespace ironphoenix {
     }
 
     int SearchEngine::evaluate(const Position& pos) const noexcept {
-        return Eval::evaluate(pos);
+        if (!evalCacheActive_ || !Tuning::search().evalCacheEnabled)
+            return Eval::evaluate(pos);
+
+        const Key key = pos.key();
+        EvalCacheEntry& entry =
+            evalCache_[static_cast<std::size_t>(key) & (EVAL_CACHE_CAPACITY - 1)];
+        if (entry.epoch == evalCacheEpoch_ && entry.key == key) {
+            ++evalCacheHits_;
+            return entry.score;
+        }
+        const int score = Eval::evaluate(pos);
+        entry.key = key;
+        entry.score = score;
+        entry.epoch = evalCacheEpoch_;
+        return score;
     }
 
     int SearchEngine::historyBonus(int depth) const noexcept {
@@ -456,6 +540,8 @@ namespace ironphoenix {
         std::array<ScoredMove, MAX_MOVES> scored;
         const std::size_t count = static_cast<std::size_t>(end - begin);
 
+        bool existingCheckKnown = false;
+        bool existingCheck = false;
         for (std::size_t i = 0; i < count; ++i) {
             const Move move = begin[i];
             const bool terminal = move.isCapture() && isTerminalKingCapture(pos, move);
@@ -465,7 +551,36 @@ namespace ironphoenix {
             // check metadata for pruning safety.
             const bool needCheck = givesCheckBits != nullptr
                 || ((!move.isCapture() && !move.isPromotion()) && move != ttMove);
-            const bool givesCheck = !terminal && needCheck && pos.givesCheck(move);
+            bool givesCheck = false;
+            if (!terminal && needCheck) {
+                bool possible = true;
+                if (Tuning::search().fastCheckPrefilter
+                    && !move.isCapture() && !move.isPromotion()
+                    && !move.isEnPassant() && !move.isCastle()
+                    && !quietMayGiveCheck(pos, move)) {
+                    // The old givesCheck() also reports checks that were
+                    // already present before a quiet move. Compute this once
+                    // per node so the fast prefilter is semantically exact.
+                    if (!existingCheckKnown) {
+                        existingCheckKnown = true;
+                        const Color mover = pos.sideToMove();
+                        const Bitboard occ = pos.occupancy();
+                        for (unsigned ci = 0; ci < COLOR_NB; ++ci) {
+                            const Color foe = static_cast<Color>(ci);
+                            if (!enemy(mover, foe) || !pos.isAlive(foe))
+                                continue;
+                            const Square king = pos.kingSquare(foe);
+                            if (king != SQ_NONE && pos.isAttackedBy(king, mover, occ)) {
+                                existingCheck = true;
+                                break;
+                            }
+                        }
+                    }
+                    possible = existingCheck;
+                }
+                if (possible)
+                    givesCheck = pos.givesCheck(move);
+            }
 
             scored[i].score = moveScore(pos, move, ttMove, ply, givesCheck);
             scored[i].move = move;
@@ -654,10 +769,17 @@ namespace ironphoenix {
                 pvLength_[ply + 1] = ply + 1;
             }
             else {
+                // A non-king move from a square outside every king ray
+                // cannot expose a new enemy attack on an already-safe king.
+                // King moves, EP, castling, checks and aligned sources keep
+                // full verification. All subsequent move/search logic is same.
+                const bool verifyKing = inCheckNode
+                    || !Tuning::search().fastKingLegality
+                    || kingCheckCanChange(pos, move);
                 StateInfo st;
                 pos.makeMove(move, st);
 
-                if (pos.inCheck(us)) {
+                if (verifyKing && pos.inCheck(us)) {
                     legal = false;
                 }
                 else {
@@ -956,7 +1078,7 @@ namespace ironphoenix {
             const bool canPruneMove = !pvNode && !inCheckNode
                 && move != ttMove && !moveMateWindow;
             const bool lmpCandidate = canPruneMove && quiet
-                && legalMoves >= 3 + depth * depth
+                && legalMoves >= (3 + depth * depth) / (2 - ss.improving)
                 && lmrHistoryScore < tuning.lmpHistoryThreshold;
             const bool hmpCandidate = canPruneMove && quiet
                 && depth <= tuning.hmpMaxDepth
@@ -990,9 +1112,12 @@ namespace ironphoenix {
                 pvLength_[ply + 1] = ply + 1;
             }
             else {
+                const bool verifyKing = inCheckNode
+                    || !tuning.fastKingLegality
+                    || kingCheckCanChange(pos, move);
                 StateInfo st;
                 pos.makeMove(move, st);
-                if (pos.inCheck(us)) {
+                if (verifyKing && pos.inCheck(us)) {
                     legal = false;
                 }
                 else {
@@ -1011,9 +1136,17 @@ namespace ironphoenix {
 
                         if (lmrEligible) {
                             reduction = lmrBaseReduction(depth, legalMoves);
+                            
+							// If the current node is improving relative to a same-team ancestor,
+                            // reduce the LMR reduction by 1 ply. This allows the search to explore
+                            // more deeply in positions that are showing promise, while still applying
+                            // LMR to less promising lines.
+                            reduction += !ss.improving;
 
-                            // Reduction adjustments go here!
-
+							// If this is a PV node, reduce the LMR reduction by 1 ply. This allows the
+                            // search to explore more deeply in the principal variation, while still applying
+                            // LMR to less promising lines.
+                            reduction -= pvNode;
                             reduction = std::clamp(reduction, 0, depth - 2);
                         }
 

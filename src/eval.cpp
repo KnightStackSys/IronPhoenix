@@ -1,5 +1,6 @@
 #include "ironphoenix/eval.hpp"
 #include "ironphoenix/bishop_eval.hpp"
+#include "ironphoenix/king_eval.hpp"
 
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/nnue.hpp"
@@ -7,6 +8,8 @@
 #include "ironphoenix/tuning.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cstdlib>
 
 namespace ironphoenix::Eval {
@@ -114,12 +117,58 @@ namespace ironphoenix::Eval {
                 && static_cast<bool>(Geometry::KnightEnemyProximity[sq] & enemyMaterial);
         }
 
+        // Pawn attacks are determined solely by pawn positions and seat.
+        // Cache the union, not evaluation scores. Pawn structures change
+        // much less frequently than the rest of the 4PC position.
+        // thread_local keeps this lock-free under Lazy SMP.
+        IRONPHOENIX_FORCE_INLINE Bitboard pawnAttackUnion(
+            Color c, Bitboard pawns) noexcept {
+            constexpr std::size_t SLOTS = 256;
+            struct Entry {
+                Bitboard key{};
+                Bitboard attacks{};
+                bool valid = false;
+            };
+            static thread_local std::array<std::array<Entry, SLOTS>, COLOR_NB> cache{};
+
+            auto compute = [&]() noexcept {
+                Bitboard attacks{};
+                Bitboard remaining = pawns;
+                while (remaining)
+                    attacks |= Geometry::PawnAttacks[c][popLsb(remaining)];
+                return attacks;
+            };
+
+            if (!Tuning::search().pawnAttackCache)
+                return compute();
+
+            // Mix all three 64-bit words so promoted or remote pawns
+            // cannot alias simply due to their placement on the 14x14 board.
+            std::uint64_t hash = pawns.w0 ^ (pawns.w1 * 0x9E3779B97F4A7C15ULL)
+                ^ (pawns.w2 * 0xBF58476D1CE4E5B9ULL);
+            hash ^= hash >> 30;
+            hash *= 0xBF58476D1CE4E5B9ULL;
+            hash ^= hash >> 27;
+            auto& slot = cache[static_cast<unsigned>(c)]
+                [static_cast<std::size_t>(hash) & (SLOTS - 1)];
+            if (slot.valid && slot.key == pawns)
+                return slot.attacks;
+
+            slot.key = pawns;
+            slot.attacks = compute();
+            slot.valid = true;
+            return slot.attacks;
+        }
+
         int mobilityForColor(const Position& pos, Color c,
                              Bitboard& teamAttacks, unsigned& teamOutposts,
-                             Bitboard* teamBishopAttacks) noexcept {
+                             Bitboard* teamBishopAttacks,
+                             Bitboard& teamSliderAttacks) noexcept {
             const Bitboard blockedByTeam = teamOccupancy(pos, c);
             const auto& tune = Tuning::eval();
-            const bool scoreThreats = tune.attackingPiecesWeight != 0;
+            const bool scoreThreats = tune.attackingPiecesWeight != 0
+                || tune.kingZoneAttackPenalty != 0
+                || tune.kingMateThreatPenalty != 0;
             const bool scoreBishopWeakness = tune.bishopColorWeaknessPenalty != 0
                 && pos.isAlive(c);
 
@@ -164,6 +213,8 @@ namespace ironphoenix::Eval {
                         ++teamOutposts;
                     if (scoreThreats)
                         teamAttacks |= attacks;
+                    if (pt != KNIGHT)
+                        teamSliderAttacks |= attacks;
                 }
             };
 
@@ -173,11 +224,8 @@ namespace ironphoenix::Eval {
             scorePieces(QUEEN);
 
             // Pawns' capture directions are threats, not mobility.
-            if (scoreThreats) {
-                Bitboard pawns = pos.pieces(c, PAWN);
-                while (pawns)
-                    teamAttacks |= Geometry::PawnAttacks[c][popLsb(pawns)];
-            }
+            if (scoreThreats)
+                teamAttacks |= pawnAttackUnion(c, pos.pieces(c, PAWN));
             return score;
         }
 
@@ -335,6 +383,7 @@ namespace ironphoenix::Eval {
         int handcraftedEvaluate(const Position& pos) noexcept {
             int team0 = 0, team1 = 0;
             Bitboard attacks[2]{};
+            Bitboard sliderAttacks[2]{};
             Bitboard bishopAttacks[2][2]{};
             unsigned knightOutposts[2]{};
 
@@ -342,7 +391,8 @@ namespace ironphoenix::Eval {
                 const Color c = static_cast<Color>(ci);
                 const int score = materialForColor(pos, c)
                     + mobilityForColor(pos, c, attacks[teamOf(c)],
-                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)])
+                                       knightOutposts[teamOf(c)], bishopAttacks[teamOf(c)],
+                                       sliderAttacks[teamOf(c)])
                     + knightDevelopmentForColor(pos, c);
                 if (teamOf(c) == 0)
                     team0 += score;
@@ -362,7 +412,9 @@ namespace ironphoenix::Eval {
 
             // Team-wise complementary bishop coverage and four seat-oriented
             // pawn/king structures. All new feature weights default to zero.
-            const int score = team0 - team1 + bishopFeatureDifference(pos, bishopAttacks);
+            const int score = team0 - team1
+                + bishopFeatureDifference(pos, bishopAttacks)
+                + kingFeatureDifference(pos, attacks, sliderAttacks);
             return teamOf(pos.sideToMove()) == 0 ? score : -score;
         }
 

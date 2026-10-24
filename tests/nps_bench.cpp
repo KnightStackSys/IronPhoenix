@@ -1,6 +1,7 @@
 #include "ironphoenix/geometry.hpp"
 #include "ironphoenix/position.hpp"
 #include "ironphoenix/search.hpp"
+#include "ironphoenix/tuning.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -96,7 +97,88 @@ int main(int argc, char** argv) {
               << "Last completed iteration: " << lastNodes
               << " nodes, " << lastNps << " NPS\n"
               << "Engine finished: " << (finished ? "yes" : "no (time limit)") << '\n';
+    // Compare feature groups on the same runner and search position. Never
+    // treat absolute CI NPS as cross-machine evidence; compare relative changes.
+    const auto original = Tuning::eval();
+    const auto originalSearch = Tuning::search();
+    auto measure = [&](const char* label) {
+        auto probe = std::make_unique<SearchEngine>();
+        SearchLimits probeLimits{};
+        probeLimits.nodes = requested;
+        std::ostringstream trace;
+        const auto probeStart = std::chrono::steady_clock::now();
+        probe->start(pos, probeLimits, trace);
+        while (probe->searching()
+            && std::chrono::steady_clock::now() - probeStart < std::chrono::seconds(120))
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        const bool done = !probe->searching();
+        probe->stopAndWait();
+        std::uint64_t nps = 0;
+        const std::string output = trace.str();
+        for (auto it = std::sregex_iterator(output.begin(), output.end(), info);
+             it != std::sregex_iterator(); ++it)
+            nps = std::stoull((*it)[2].str());
+        std::cout << "King feature NPS: " << label << " = " << nps << '\n';
+        return done;
+    };
+
+    Tuning::eval().kingPinPenalty = 0;
+    Tuning::eval().kingXrayPenalty = 0;
+    const bool pinsDone = measure("pin-and-xray-disabled");
+
+    Tuning::eval() = original;
+    Tuning::eval().kingShieldPenalty = 0;
+    Tuning::eval().kingPawnStormPenalty = 0;
+    Tuning::eval().kingPawnlessWingPenalty = 0;
+    const bool pawnsDone = measure("shield-storm-wing-disabled");
+
+    Tuning::eval() = original;
+    Tuning::eval().kingZoneAttackPenalty = 0;
+    Tuning::eval().kingMateThreatPenalty = 0;
+    const bool threatDone = measure("king-zone-and-mate-disabled");
+
+    Tuning::eval() = original;
+    Tuning::eval().kingShieldPenalty = 0;
+    Tuning::eval().kingZoneAttackPenalty = 0;
+    Tuning::eval().kingPawnStormPenalty = 0;
+    Tuning::eval().kingMateThreatPenalty = 0;
+    Tuning::eval().kingCentralizationBonus = 0;
+    Tuning::eval().kingPawnlessWingPenalty = 0;
+    Tuning::eval().kingPinPenalty = 0;
+    Tuning::eval().kingXrayPenalty = 0;
+    Tuning::eval().kingCastlingRightsBonus = 0;
+    const bool noKingDone = measure("all-new-king-features-disabled");
+    Tuning::eval() = original;
+    Tuning::search().fastCheckPrefilter = 0;
+    const bool originalOrderingDone = measure("fast-check-prefilter-disabled");
+    Tuning::search() = originalSearch;
+
+    Tuning::search().evalCacheEnabled = 0;
+    const bool cacheDisabledDone = measure("eval-cache-disabled");
+    Tuning::search() = originalSearch;
+    const bool cacheEnabledDone = measure("eval-cache-enabled");
+
+    Tuning::search().fastKingLegality = 0;
+    const bool fullLegalityDone = measure("full-king-legality");
+    Tuning::search() = originalSearch;
+    const bool fastLegalityDone = measure("fast-king-legality");
+
+    Tuning::search().pawnAttackCache = 0;
+    const bool pawnCacheOffDone = measure("pawn-attack-cache-disabled");
+    Tuning::search() = originalSearch;
+    const bool pawnCacheOnDone = measure("pawn-attack-cache-enabled");
+
+    Tuning::search().kingRayPrefilter = 0;
+    const bool rayOffDone = measure("king-ray-prefilter-disabled");
+    Tuning::search() = originalSearch;
+    const bool rayOnDone = measure("king-ray-prefilter-enabled");
+
     // This is a diagnostic, not an NPS threshold test. CI runner CPU differs
     // from local hardware, and iteration counters may be below node budget.
-    return finished ? 0 : 1;
+    return (finished && pinsDone && pawnsDone && threatDone
+        && noKingDone && originalOrderingDone
+        && cacheDisabledDone && cacheEnabledDone
+        && fullLegalityDone && fastLegalityDone
+        && pawnCacheOffDone && pawnCacheOnDone
+        && rayOffDone && rayOnDone) ? 0 : 1;
 }

@@ -37,6 +37,12 @@ void SearchEngine::startMultiPV(
     multiPV = std::clamp(multiPV, 2, MAX_MULTI_PV);
 
     stopAndWait();
+    if (++evalCacheEpoch_ == 0) {
+        evalCacheEpoch_ = 1;
+        evalCache_.fill(EvalCacheEntry{});
+    }
+    evalCacheHits_ = 0;
+    evalCacheActive_ = true;
     stopRequested_.store(false, std::memory_order_relaxed);
     ponderHitRequested_.store(false, std::memory_order_relaxed);
     searching_.store(true, std::memory_order_relaxed);
